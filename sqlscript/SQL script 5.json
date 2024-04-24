@@ -1,0 +1,17 @@
+{
+	"name": "SQL script 5",
+	"properties": {
+		"content": {
+			"query": "-- Checking Combine Meta and Sensor Data\nSELECT\n    TOP 50 *\nFROM\n    OPENROWSET(\n        BULK 'https://projectwatercrisis.dfs.core.windows.net/waterstorageaccount/ML_Folder/raw_data.csv',\n        FORMAT = 'CSV',\n        PARSER_VERSION = '2.0'\n    ) AS [result]\nORDER BY [result].[C1]",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "master",
+				"poolName": "Built-in"
+			},
+			"resultLimit": -1
+		},
+		"type": "SqlQuery"
+	}
+}

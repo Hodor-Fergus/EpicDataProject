@@ -1,0 +1,13 @@
+{
+	"name": "Gauge_Data_reads",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "API_Gauge_Data",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "RestResource",
+		"schema": []
+	},
+	"type": "Microsoft.Synapse/workspaces/datasets"
+}

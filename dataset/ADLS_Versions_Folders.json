@@ -1,0 +1,141 @@
+{
+	"name": "ADLS_Versions_Folders",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "water-crisis-WorkspaceDefaultStorage",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "DelimitedText",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"folderPath": "BronzeLayer",
+				"fileSystem": "waterstorageaccount"
+			},
+			"columnDelimiter": ",",
+			"escapeChar": "\\",
+			"firstRowAsHeader": true,
+			"quoteChar": "\""
+		},
+		"schema": [
+			{
+				"name": "sensor_id",
+				"type": "String"
+			},
+			{
+				"name": "description",
+				"type": "String"
+			},
+			{
+				"name": "dataType",
+				"type": "String"
+			},
+			{
+				"name": "location",
+				"type": "String"
+			},
+			{
+				"name": "type",
+				"type": "String"
+			},
+			{
+				"name": "unit",
+				"type": "String"
+			},
+			{
+				"name": "timeZone",
+				"type": "String"
+			},
+			{
+				"name": "publicAccess",
+				"type": "String"
+			},
+			{
+				"name": "component",
+				"type": "String"
+			},
+			{
+				"name": "componentType",
+				"type": "String"
+			},
+			{
+				"name": "componentDesc",
+				"type": "String"
+			},
+			{
+				"name": "componentPublicAccess",
+				"type": "String"
+			},
+			{
+				"name": "info_sample_rate_(min)",
+				"type": "String"
+			},
+			{
+				"name": "info_min_val",
+				"type": "String"
+			},
+			{
+				"name": "info_max_val",
+				"type": "String"
+			},
+			{
+				"name": "info_order_id",
+				"type": "String"
+			},
+			{
+				"name": "info_region",
+				"type": "String"
+			},
+			{
+				"name": "info_basin",
+				"type": "String"
+			},
+			{
+				"name": "info_x_coord_utm_etrs89",
+				"type": "String"
+			},
+			{
+				"name": "info_y_coord_utm_etrs89",
+				"type": "String"
+			},
+			{
+				"name": "info_river_district",
+				"type": "String"
+			},
+			{
+				"name": "info_state",
+				"type": "String"
+			},
+			{
+				"name": "info_province",
+				"type": "String"
+			},
+			{
+				"name": "info_river",
+				"type": "String"
+			},
+			{
+				"name": "info_sub_basin",
+				"type": "String"
+			},
+			{
+				"name": "info_drained_basin_surface(km2)",
+				"type": "String"
+			},
+			{
+				"name": "info_municipality",
+				"type": "String"
+			},
+			{
+				"name": "info_tipology",
+				"type": "String"
+			},
+			{
+				"name": "info_responsible_entity",
+				"type": "String"
+			}
+		]
+	},
+	"type": "Microsoft.Synapse/workspaces/datasets"
+}

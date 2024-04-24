@@ -1,0 +1,982 @@
+{
+	"name": "Water Crisis_Copy1",
+	"properties": {
+		"folder": {
+			"name": "Other Files"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "WaterSparkPool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "e964db04-ed91-4980-855b-0de6e2924a7b"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/e6a89ab3-ce27-4148-bad8-97a6fee2010c/resourceGroups/FergusAssam/providers/Microsoft.Synapse/workspaces/water-crisis/bigDataPools/WaterSparkPool",
+				"name": "WaterSparkPool",
+				"type": "Spark",
+				"endpoint": "https://water-crisis.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/WaterSparkPool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.3",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# PySpark ETL"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Parameters and Libraries"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Create a parameter that will be used to change read folder and mode dynamically in the pipeline"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"tags": [
+						"parameters"
+					]
+				},
+				"source": [
+					"# Get the version of the folder from the Bronze layer and this will be used as a parameter in the pipeline (Toggled as a parameter)\r\n",
+					"FolderName = \"Version_322\"\r\n",
+					"Mode = \"overwrite\" \r\n",
+					"#For the first time it overwrites and for subsequent notebooks, it apppends which is adjusted via the pipeline\r\n",
+					"# Also live data can be extracted from the API."
+				],
+				"execution_count": 76
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Generate the dataset Folder incrementally"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"FolderName_SeperatorRemoved = FolderName.replace(\"_\",\"\")\r\n",
+					"VersionName = FolderName.split('_')[0]\r\n",
+					"VersionNum = FolderName.split('_')[1]"
+				],
+				"execution_count": 77
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Import Libraries"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from pyspark.sql import SparkSession\r\n",
+					"from pyspark.sql import functions as F\r\n",
+					"from pyspark.sql.functions import lit,col,regexp_replace,to_date,count,sum,coalesce,to_timestamp #add constant or literal value as a new column to the DataFrame. #regexp_replace to replace a character in a string\r\n",
+					"from pyspark.sql.types import DateType\r\n",
+					"import re\r\n",
+					"import matplotlib.pyplot as plt\r\n",
+					"from scipy.stats import zscore\r\n",
+					"import pandas as pd\r\n",
+					"\r\n",
+					"spark.sql(\"set spark.sql.legacy.timeParserPolicy=LEGACY\")\r\n",
+					"#If you check the schema table, you will notice the column Timestamp is stored as (M.D.Y.hh.mm). \r\n",
+					"#inorder to handle unforseen exception error. eg October, Oct ,oct, 10, we use the timeParserPolicy=LEGACY to fix this."
+				],
+				"execution_count": 82
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Create Connections"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Spark Session & blob connection\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#Create Spark Session and connection to blob storage. It is created in the Notebook and not in the pipeline. \r\n",
+					"#You can only set Spark configuration properties that start with the spark.sql prefix.\r\n",
+					"\"\"\"You can have many spark sessions but only 1 spark context (like spark driver). It is better in the notebook because\r\n",
+					"It already has access to the underlying Spark features for creating RDD and dataframe.\"\"\"\r\n",
+					"\r\n",
+					"blob_account = \"waterstorageaccount\"\r\n",
+					"blob_container = \"BronzeLayer\"\r\n",
+					"\r\n",
+					"sc = SparkSession.builder.getOrCreate()\r\n",
+					"#getConnectionString()\r\n",
+					"token_library = sc._jvm.com.microsoft.azure.synapse.tokenlibrary.TokenLibrary\r\n",
+					"dls_sas_token = token_library.getConnectionString(\"water-crisis-WorkspaceDefaultStorage\")\r\n",
+					"spark.conf.set(\r\n",
+					"    'fs.azure.sas.{}.{}.blob.core.windows.net' .format(blob_container, blob_account),\r\n",
+					"    dls_sas_token)\r\n",
+					"\r\n",
+					"#https://projectwatercrisis.dfs.core.windows.net/waterstorageaccount/BronzeLayer/Version_322/gauge_sensors_reads.csv\r\n",
+					""
+				],
+				"execution_count": 79
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Dynamic Delimiter"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Use Regex to read the header, determine the delimiter from a set of predefined common delimiters \r\n",
+					"# and store it as a variable then use that variable as a delimiter\r\n",
+					"def f_get_delimiter (source_path):\r\n",
+					"    try:\r\n",
+					"        headerlist = spark.sparkContext.textFile(source_path).take(1)\r\n",
+					"        header_str = ''.join(headerlist)\r\n",
+					"\r\n",
+					"        results= re.search(\"(,|;|\\\\|)\",header_str)\r\n",
+					"        return results.group()\r\n",
+					"    except Exception as err:\r\n",
+					"        print(\"Error Occured \", str(err))\r\n",
+					"\r\n",
+					""
+				],
+				"execution_count": 80
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Load Files"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Load MetaData"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"Individual metadata"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"# Constants for sub metadata name\r\n",
+					"b = \"sensors\"\r\n",
+					"c = \"metadata\"\r\n",
+					"metadata_path = 'abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/Metadata/'\r\n",
+					"\r\n",
+					"#gauge piezometer,pluviometer,reservoir\r\n",
+					"\r\n",
+					"# Variable parts of your metadata filename\r\n",
+					"types = [\"gauge\", \"piezometer\", \"pluviometer\", \"reservoir\"]\r\n",
+					"\r\n",
+					"# Empty DataFrame to union all loaded DataFrames\r\n",
+					"# Ensure to define a schema that matches your data for better performance and correctness\r\n",
+					"\r\n",
+					"for subtype in types:\r\n",
+					"    \r\n",
+					"    file_path = f\"{metadata_path}{subtype}_{b}_{c}.csv\"\r\n",
+					"    delimiter_type = (f_get_delimiter(file_path))\r\n",
+					"    print(f\"{subtype} delimiter: {delimiter_type}\")\r\n",
+					"    # Load the data into a DataFrame\r\n",
+					"    df = spark.read.load(file_path,format='csv',inferschema=True,header=True,delimiter=delimiter_type) \r\n",
+					"\r\n",
+					"    # Calculate the count of rows and columns\r\n",
+					"    row_count = df.count()\r\n",
+					"    column_count = len(df.columns)\r\n",
+					"\r\n",
+					"    # Display the count of rows and columns for each DataFrame\r\n",
+					"    print(f\"MetaData for {subtype} Sensor: {row_count} Rows and {column_count} Columns\")\r\n",
+					"    # Here you can process each DataFrame individually, e.g., show the first few rows\r\n",
+					"    print(f\"Showing metadata for {subtype} Sensor:\")\r\n",
+					"    display(df.limit(15))\r\n",
+					"\r\n",
+					"    # Perform other actions with `df` as needed, specific to each file"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Load Dataset"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"Individually"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/Version_322/gauge_sensors_reads.csv"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"# Constants for sub metadata name\r\n",
+					"s = \"sensors\"\r\n",
+					"r = \"reads\"\r\n",
+					"dataset_path = 'abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{}_{}/' .format(VersionName, VersionNum)\r\n",
+					"\r\n",
+					"#gauge piezometer,pluviometer,reservoir\r\n",
+					"\r\n",
+					"# Variable parts of your metadata filename\r\n",
+					"types = [\"gauge\", \"piezometer\", \"pluviometer\", \"reservoir\"]\r\n",
+					"\r\n",
+					"# Dictionary to store each DataFrame with 'aa' as the key\r\n",
+					"dfs_ = {}\r\n",
+					"\r\n",
+					"for subtype in types:\r\n",
+					"    \r\n",
+					"    file_path = f\"{dataset_path}{subtype}_{s}_{r}.csv\"\r\n",
+					"    delimiter_type = (f_get_delimiter(file_path))\r\n",
+					"    print(f\"{subtype} delimiter: {delimiter_type}\")\r\n",
+					"    # Load the data into a DataFrame\r\n",
+					"    df = spark.read.load(file_path,format='csv',inferschema=True,header=True,delimiter=delimiter_type) \r\n",
+					"\r\n",
+					"\r\n",
+					"    # Store the DataFrame in the dictionary with 'subtype' as the key\r\n",
+					"    dfs_[subtype] = df\r\n",
+					"\r\n",
+					"     # Calculate the count of rows and columns\r\n",
+					"    row_count = df.count()\r\n",
+					"    column_count = len(df.columns)\r\n",
+					"    # Display the count of rows and columns for each DataFrame\r\n",
+					"    print(f\"Data for {subtype} Reads: {row_count} Rows and {column_count} Columns\")\r\n",
+					"    # Here you can process each DataFrame individually, e.g., show the first few rows\r\n",
+					"    print(f\"Showing data for {subtype}: \")\r\n",
+					"    display(df)\r\n",
+					"\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Store Databases\r\n",
+					"remove databases from dictionary and store Database individually and not as list"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Assuming dfs_ dictionary is already populated as before\r\n",
+					"\r\n",
+					"for subtype in types:\r\n",
+					"    # Dynamically create variable names and assign the corresponding DataFrame from dfs_\r\n",
+					"    globals()[f'dfs_{subtype}'] = dfs_[subtype]\r\n",
+					"    print (f'{subtype} sensor reads database created.')\r\n",
+					"\r\n",
+					"print(\"All databases successfully created\")\r\n",
+					"\r\n",
+					"# At this point, variables like dfs_gauge, dfs_piezometer, dfs_pluviometer, and dfs_reservoir are created dynamically\r\n",
+					"# and refer to their respective DataFrames.\r\n",
+					"\r\n",
+					"# Example: Now you can directly use dfs_gauge, dfs_reservoir, etc."
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## GAUGE SENSOR"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Statistical Analysis"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Basic Statistics (Mean, Median, Mode, Std, Min, Max)\n",
+					"Mean: Average value of the readings. <br>\n",
+					"Standard Deviation (std): Indicates the variability of the readings. A higher standard deviation suggests greater variability. <br>\n",
+					"Min and Max: Show the range of the readings. <br>\n",
+					"25%, 50% (Median), and 75%: These percentiles provide a sense of the distribution. The 50% percentile is the median, offering a midpoint of the data. <br>\n",
+					"Mode: The value that appears most frequently. <br>"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"statistics_gaugedf = dfs_gauge.describe().transpose()\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#Convert to pandas DF\r\n",
+					"# Calculate basic statistics for each sensor and include median and mode\r\n",
+					"\r\n",
+					"dfs_gauge_pd = dfs_gauge.toPandas()\r\n",
+					"statistics_gaugedf = dfs_gauge_pd.describe().transpose()\r\n",
+					"\r\n",
+					"statistics_gaugedf['median'] = dfs_gauge_pd.median(numeric_only=True)\r\n",
+					"statistics_gaugedf['mode'] = dfs_gauge_pd.mode(numeric_only=True).iloc[0]\r\n",
+					"\r\n",
+					"# Reorder columns and Drop the '50%' row since it's redundant with the median\r\n",
+					"statistics_gaugedf = statistics_gaugedf[['count', 'std', 'min', 'max', 'mean', 'mode', 'median', '25%', '75%']]\r\n",
+					"statistics_gaugedf\r\n",
+					"\r\n",
+					"#numeric_only=True to ensure these methods are applied to numeric columns only. This is necessary if your \r\n",
+					"#DataFrame contains non-numeric data types, and it will help avoid potential errors"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Sensor with Wide Range of Readings\n",
+					"plot shows significant fluctuations over time, indicating a wide range of readings from its minimum to maximum values. Such wide variances might be due to environmental changes, sensor sensitivity, or specific events affecting the sensor's measurements.\n",
+					"\n",
+					"#### Sensor with High Variability: \n",
+					"The sensor chosen for its high variability demonstrates a pattern of fluctuation in its readings, reflecting its high standard deviation. This could be indicative of a highly dynamic environment or process being measured, or possibly, the sensor's readings are affected by intermittent factors.\n",
+					"\n",
+					"check metadat to understand"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"dfs_gauge"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Select sensors based on a wide range of readings (significant min and max values)\r\n",
+					"sensor_wide_range = statistics_gaugedf['max'] - statistics_gaugedf['min']\r\n",
+					"sensor_wide_range_id = sensor_wide_range.idxmax()\r\n",
+					"\r\n",
+					"# Sensor with high variability (high standard deviation)\r\n",
+					"sensor_high_variability_id = statistics_gaugedf['std'].idxmax()\r\n",
+					"\r\n",
+					"# Convert timestamp to datetime\r\n",
+					"dfs_gauge['_c0'] = pd.to_datetime(dfs_gauge['_c0'])\r\n",
+					"\r\n",
+					"# Plotting\r\n",
+					"fig, ax = plt.subplots(2, 1, figsize=(14, 10))\r\n",
+					"\r\n",
+					"# Sensor with a wide range of readings\r\n",
+					"ax[0].plot(dfs_gauge['_c0'], dfs_gauge[sensor_wide_range_id], label=sensor_wide_range_id)\r\n",
+					"ax[0].set_title(f'Sensor with Wide Range of Readings: {sensor_wide_range_id}')\r\n",
+					"ax[0].set_xlabel('Timestamp')\r\n",
+					"ax[0].set_ylabel('Readings')\r\n",
+					"ax[0].legend()\r\n",
+					"\r\n",
+					"# Sensor with high variability\r\n",
+					"ax[1].plot(dfs_gauge['_c0'], dfs_gauge[sensor_high_variability_id], label=sensor_high_variability_id, color='orange')\r\n",
+					"ax[1].set_title(f'Sensor with High Variability: {sensor_high_variability_id}')\r\n",
+					"ax[1].set_xlabel('Timestamp')\r\n",
+					"ax[1].set_ylabel('Readings')\r\n",
+					"ax[1].legend()\r\n",
+					"\r\n",
+					"plt.tight_layout()\r\n",
+					"plt.show()\r\n",
+					""
+				],
+				"execution_count": 72
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Detect Anomalies"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Z-SCORE"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					" In a normal distribution, about 68% of the data falls within one standard deviation of the mean, about 95% within two standard deviations, and about 99.7% within three standard deviations. Using a Z-score threshold of 3 ensures that the detected anomalies are truly extreme, minimizing the chance of falsely labeling normal variations in the data as anomalies. This approach strikes a balance between being too lenient (missing outliers) and too strict (flagging too many points as outliers), making it a widely used standard in various fields for anomaly detection."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"\r\n",
+					"# Calculate Z-scores for the selected sensors\r\n",
+					"#sensor choosen based on its significant variability in the statistical summary\r\n",
+					"dfs_gauge['zscore_wide_range'] = zscore(dfs_gauge[sensor_wide_range_id].dropna())\r\n",
+					"dfs_gauge['zscore_high_variability'] = zscore(dfs_gauge[sensor_high_variability_id].dropna())\r\n",
+					"\r\n",
+					"# Define a threshold for outliers\r\n",
+					"threshold = 3\r\n",
+					"\r\n",
+					"# Detect outliers based on the threshold\r\n",
+					"outliers_wide_range = dfs_gauge[abs(dfs_gauge['zscore_wide_range']) > threshold]\r\n",
+					"outliers_high_variability = dfs_gauge[abs(dfs_gauge['zscore_high_variability']) > threshold]\r\n",
+					"\r\n",
+					"# Summary of outliers\r\n",
+					"outliers_summary = pd.DataFrame({\r\n",
+					"    f\"Outliers in {sensor_wide_range_id}\": [len(outliers_wide_range)],\r\n",
+					"    f\"Outliers in {sensor_high_variability_id}\": [len(outliers_high_variability)]\r\n",
+					"})\r\n",
+					"\r\n",
+					"outliers_summary\r\n",
+					""
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### IQR"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					" Interquartile Range (IQR) method. The IQR method is robust against outliers and is often used to identify them. It calculates the range between the first quartile (25th percentile) and the third quartile (75th percentile) of the data. Points lying outside 1.5 times the IQR from the quartiles are considered outliers."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Function to detect outliers using IQR\r\n",
+					"def detect_outliers_iqr(data, feature):\r\n",
+					"    Q1 = data[feature].quantile(0.25)\r\n",
+					"    Q3 = data[feature].quantile(0.75)\r\n",
+					"    IQR = Q3 - Q1\r\n",
+					"    lower_bound = Q1 - 1.5 * IQR\r\n",
+					"    upper_bound = Q3 + 1.5 * IQR\r\n",
+					"    \r\n",
+					"    outliers = data[(data[feature] < lower_bound) | (data[feature] > upper_bound)]\r\n",
+					"    return outliers\r\n",
+					"\r\n",
+					"# Detect outliers using IQR for the two sensors\r\n",
+					"outliers_iqr_wide_range = detect_outliers_iqr(dfs_gauge, sensor_wide_range_id)\r\n",
+					"outliers_iqr_high_variability = detect_outliers_iqr(dfs_gauge, sensor_high_variability_id)\r\n",
+					"\r\n",
+					"# Summary of outliers detected by IQR method\r\n",
+					"outliers_iqr_summary = pd.DataFrame({\r\n",
+					"    f\"Outliers (IQR) in {sensor_wide_range_id}\": [len(outliers_iqr_wide_range)],\r\n",
+					"    f\"Outliers (IQR) in {sensor_high_variability_id}\": [len(outliers_iqr_high_variability)]\r\n",
+					"})\r\n",
+					"\r\n",
+					"outliers_iqr_summary\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Visualization"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## PIEZOMETER SENSOR"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## PLUVIOMETER SENSOR"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## RESERVOIR SENSOR"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			}
+		]
+	}
+}

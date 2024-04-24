@@ -1,0 +1,32 @@
+{
+	"name": "Temporary Fix trigger",
+	"properties": {
+		"annotations": [],
+		"runtimeState": "Started",
+		"pipelines": [
+			{
+				"pipelineReference": {
+					"referenceName": "Temporary Fix",
+					"type": "PipelineReference"
+				}
+			}
+		],
+		"type": "ScheduleTrigger",
+		"typeProperties": {
+			"recurrence": {
+				"frequency": "Day",
+				"interval": 1,
+				"startTime": "2024-04-18T05:00:00",
+				"timeZone": "Romance Standard Time",
+				"schedule": {
+					"minutes": [
+						0
+					],
+					"hours": [
+						5
+					]
+				}
+			}
+		}
+	}
+}

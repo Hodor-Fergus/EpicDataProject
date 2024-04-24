@@ -1,0 +1,1153 @@
+{
+	"name": "IoT ML",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "backuppool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "ebd9dcfd-db16-4c7c-9aec-8b04e2565a85"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/e6a89ab3-ce27-4148-bad8-97a6fee2010c/resourceGroups/FergusAssam/providers/Microsoft.Synapse/workspaces/water-crisis/bigDataPools/backuppool",
+				"name": "backuppool",
+				"type": "Spark",
+				"endpoint": "https://water-crisis.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/backuppool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Machine Learning"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Variables"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Get the version of the folder from the Bronze layer and this will be used as a parameter in the pipeline (Toggled as a parameter)\r\n",
+					"FolderName = \"Version_01\"\r\n",
+					"Mode = \"overwrite\" \r\n",
+					"MetaFolder = \"Metadata\"\r\n",
+					"category = ['reservoir','gauge','pluviometer', 'piezometer']\r\n",
+					"meta_end = '_sensors_metadata'\r\n",
+					"sensors_end = '_sensors_reads'\r\n",
+					"meta_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}/{MetaFolder}\"\r\n",
+					"sensors_reads_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}\"\r\n",
+					"ml_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/ML_Folder\"\r\n",
+					""
+				],
+				"execution_count": 2
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Path Exits"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Check if the file path exists using mssparkutils\r\n",
+					"if not mssparkutils.fs.exists(f\"{ml_path}\"):\r\n",
+					"    print(f\"ML Folder Not Found, Creating One Now \")\r\n",
+					"    mssparkutils.fs.mkdirs(f\"{ml_path}\")\r\n",
+					"    print(f\"ML Folder Created\")\r\n",
+					"else:\r\n",
+					"    print(f\"ML Folder Found, Proceeding with code\")"
+				],
+				"execution_count": 3
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Import Libraries & Session"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#Weather API"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"pip install openmeteo-requests\r\n",
+					""
+				],
+				"execution_count": 4
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"pip install requests-cache retry-requests"
+				],
+				"execution_count": 5
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"import pandas as pd\r\n",
+					"import numpy as np\r\n",
+					"from datetime import datetime, timedelta\r\n",
+					"from notebookutils import mssparkutils\r\n",
+					"from pyspark.sql import SparkSession\r\n",
+					"from sklearn.model_selection import train_test_split\r\n",
+					"from sklearn.linear_model import LinearRegression\r\n",
+					"from sklearn.metrics import mean_squared_error\r\n",
+					"from sklearn.preprocessing import StandardScaler\r\n",
+					"import openmeteo_requests\r\n",
+					"from retry_requests import retry\r\n",
+					"import requests_cache\r\n",
+					"from pyspark.sql.types import DateType\r\n",
+					"from datetime import datetime, timedelta\r\n",
+					"from tqdm.notebook import tqdm\r\n",
+					"import re\r\n",
+					"#from pathlib import Path\r\n",
+					"import matplotlib.pyplot as plt\r\n",
+					"from scipy.stats import zscore\r\n",
+					"import requests,json,os\r\n",
+					"\r\n",
+					"\r\n",
+					"#Create Spark Session and connection to blob storage. It is created in the Notebook and not in the pipeline. \r\n",
+					"#You can only set Spark configuration properties that start with the spark.sql prefix.\r\n",
+					"# \"\"\"You can have many spark sessions but only 1 spark context (like spark driver). It is better in the notebook because\r\n",
+					"# It already has access to the underlying Spark features for creating RDD and dataframe.\"\"\"\r\n",
+					"\r\n",
+					"blob_account = \"waterstorageaccount\"\r\n",
+					"blob_container = \"BronzeLayer\"\r\n",
+					"\r\n",
+					"sc = SparkSession.builder.getOrCreate()\r\n",
+					"#getConnectionString()\r\n",
+					"token_library = sc._jvm.com.microsoft.azure.synapse.tokenlibrary.TokenLibrary\r\n",
+					"dls_sas_token = token_library.getConnectionString(\"water-crisis-WorkspaceDefaultStorage\")\r\n",
+					"spark.conf.set(\r\n",
+					"    'fs.azure.sas.{}.dfs.core.windows.net' .format(blob_account),\r\n",
+					"    dls_sas_token)"
+				],
+				"execution_count": 6
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Combining Files"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Meta Files"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"import pandas as pd"
+				],
+				"execution_count": 7
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Paths to the CSV files\r\n",
+					"meta_files = [\r\n",
+					"    f\"{meta_path}/{category[0]}{meta_end}.csv\",\r\n",
+					"    f\"{meta_path}/{category[1]}{meta_end}.csv\",\r\n",
+					"    f\"{meta_path}/{category[2]}{meta_end}.csv\",\r\n",
+					"    f\"{meta_path}/{category[3]}{meta_end}.csv\"\r\n",
+					"]\r\n",
+					"\r\n",
+					"# Add column, read and convert each CSV to a Pandas DataFrame\r\n",
+					"meta_dfs = []\r\n",
+					"for f, path in enumerate(meta_files):\r\n",
+					"    df = pd.read_csv(path)\r\n",
+					"    df['sensor_type'] = category[f]\r\n",
+					"    meta_dfs.append(df)\r\n",
+					"\r\n",
+					"# Combine DataFrames\r\n",
+					"combined_meta = pd.concat(meta_dfs, ignore_index=True)\r\n",
+					"\r\n",
+					"# Save the DataFrame directly to a CSV file\r\n",
+					"combined_meta.to_csv(f\"{ml_path}/combined_meta.csv\", index=False)\r\n",
+					"\r\n",
+					"print(combined_meta.head())\r\n",
+					""
+				],
+				"execution_count": 8
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Sensor Files"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"sensor_files = [\r\n",
+					"    f\"{sensors_reads_path}/{category[0]}{sensors_end}.csv\",\r\n",
+					"    f\"{sensors_reads_path}/{category[1]}{sensors_end}.csv\",\r\n",
+					"    f\"{sensors_reads_path}/{category[2]}{sensors_end}.csv\",\r\n",
+					"    f\"{sensors_reads_path}/{category[3]}{sensors_end}.csv\"\r\n",
+					"]\r\n",
+					"\r\n",
+					"\r\n",
+					"# Read and reshape each CSV file\r\n",
+					"sensor_dfs = []\r\n",
+					"for path in sensor_files:\r\n",
+					"    df = pd.read_csv(path)\r\n",
+					"    \r\n",
+					"    # Assuming the first column is the date column, rename it if necessary\r\n",
+					"    first_column = df.columns[0]\r\n",
+					"    df.rename(columns={first_column: 'Date'}, inplace=True)\r\n",
+					"    \r\n",
+					"    # Melt the DataFrame, keeping the 'Date' column fixed\r\n",
+					"    melted_df = pd.melt(df, id_vars=['Date'], var_name='Sensor_Type', value_name='Reading')\r\n",
+					"    sensor_dfs.append(melted_df)\r\n",
+					"\r\n",
+					"# Combine all melted DataFrames\r\n",
+					"combined_sensor = pd.concat(sensor_dfs, ignore_index=True)\r\n",
+					"sensor_dfs = [pd.read_csv(path) for path in sensor_files]\r\n",
+					"\r\n",
+					"combined_sensor.to_csv(f\"{ml_path}/combined_sensor.csv\", index=False)\r\n",
+					"\r\n",
+					"# Print a sample to verify\r\n",
+					"print(combined_sensor.head())"
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Merge"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Perform a full outer join on id\r\n",
+					"raw_data = pd.merge(combined_meta, combined_sensor, left_on='sensor_id', right_on='Sensor_Type', how='outer')\r\n",
+					"\r\n",
+					"# Remove the 'Sensor_Type' column as it is redundant and save\r\n",
+					"raw_data.drop('Sensor_Type', axis=1, inplace=True)\r\n",
+					"raw_data.to_csv(f\"{ml_path}/raw_data.csv\", index=False)\r\n",
+					"\r\n",
+					"print(raw_data.head())"
+				],
+				"execution_count": 10
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Statistics"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Iterate through each file and its corresponding category\r\n",
+					"for file, cat in zip(sensor_files, category):\r\n",
+					"    df = pd.read_csv(file)\r\n",
+					"    print(f\"Sensor: {cat}\")  # Printing the category instead of the file path\r\n",
+					"    print(\"Number of rows:\", df.shape[0])\r\n",
+					"    print(\"Number of columns:\", df.shape[1])\r\n",
+					""
+				],
+				"execution_count": 11
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Iterate through each file and its corresponding category\r\n",
+					"for file, cat in zip(meta_files, category):\r\n",
+					"    df = pd.read_csv(file)\r\n",
+					"    print(f\"Meta: {cat}\")  # Printing the category instead of the file path\r\n",
+					"    print(\"Number of rows:\", df.shape[0])\r\n",
+					"    print(\"Number of columns:\", df.shape[1])\r\n",
+					""
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Count the number of rows and columns\r\n",
+					"sm_rows = combined_sensor.shape[0]\r\n",
+					"sm_columns = combined_sensor.shape[1]\r\n",
+					"\r\n",
+					"print(\"Number of Sensor rows:\", sm_rows)\r\n",
+					"print(\"Number of Sensor columns:\", sm_columns)\r\n",
+					"print()\r\n",
+					"\r\n",
+					"\r\n",
+					"# Count the number of rows and columns\r\n",
+					"cm_rows = combined_meta.shape[0]\r\n",
+					"cm_columns = combined_meta.shape[1]\r\n",
+					"\r\n",
+					"print(\"Number of Meta rows:\", cm_rows)\r\n",
+					"print(\"Number of Meta columns:\", cm_columns)\r\n",
+					"print()\r\n",
+					"\r\n",
+					"\r\n",
+					"# Count the number of rows and columns\r\n",
+					"snum_rows = raw_data.shape[0]\r\n",
+					"snum_columns = raw_data.shape[1]\r\n",
+					"\r\n",
+					"print(\"Number of RawData rows:\", snum_rows)\r\n",
+					"print(\"Number of RawData columns:\", snum_columns)\r\n",
+					"print()"
+				],
+				"execution_count": 13
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Add Temperature Via API\r\n",
+					"get temperature readings based on datetime"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": true,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# def fetch_weather_data(latitude, longitude, start_date, end_date):\r\n",
+					"#     url = \"https://archive-api.open-meteo.com/v1/archive\"\r\n",
+					"#     params = {\r\n",
+					"#         \"latitude\": latitude,\r\n",
+					"#         \"longitude\": longitude,\r\n",
+					"#         \"start_date\": start_date,\r\n",
+					"#         \"end_date\": end_date,\r\n",
+					"#         \"hourly\": \"temperature_2m\",\r\n",
+					"#         \"timezone\": \"auto\"\r\n",
+					"#     }\r\n",
+					"#     response = requests.get(url, params=params).json()\r\n",
+					"#     if 'hourly' in response:\r\n",
+					"#         times = response['hourly']['time']\r\n",
+					"#         temperatures = response['hourly']['temperature_2m']\r\n",
+					"#         return pd.to_datetime(times, utc=True), temperatures\r\n",
+					"#     else:\r\n",
+					"#         print(\"Failed to retrieve data:\", response)\r\n",
+					"#         return None, None\r\n",
+					"\r\n",
+					"# raw_data = pd.read_csv(f\"{ml_path}/raw_data.csv\",low_memory=False)\r\n",
+					"# raw_data['Date'] = pd.to_datetime(raw_data['Date'])\r\n",
+					"\r\n",
+					"# if not mssparkutils.fs.exists(f\"{ml_path}/raw_data_final.csv\"):\r\n",
+					"#     print(\"First Run: Fetching and processing Data....\")\r\n",
+					"\r\n",
+					"#     # Assuming 'raw' is your DataFrame with a 'location' column containing lat, long\r\n",
+					"#     raw_data[['Latitude', 'Longitude']] = raw_data['location'].str.split(expand=True).astype(float)\r\n",
+					"#     raw_data = raw_data.dropna(subset=['Latitude', 'Longitude'])\r\n",
+					"\r\n",
+					"#     min_date = raw_data['Date'].min().strftime('%Y-%m-%d')\r\n",
+					"#     max_date = raw_data['Date'].max().strftime('%Y-%m-%d')\r\n",
+					"\r\n",
+					"#     unique_locations = raw_data[['Latitude', 'Longitude']].drop_duplicates()\r\n",
+					"#     weather_data_list = []\r\n",
+					"\r\n",
+					"#     for index, row in unique_locations.iterrows():\r\n",
+					"#         latitude = row['Latitude']\r\n",
+					"#         longitude = row['Longitude']\r\n",
+					"#         times, temperatures = fetch_weather_data(latitude, longitude, min_date, max_date)\r\n",
+					"#         if times is not None:\r\n",
+					"#             location_weather = pd.DataFrame({'Date': times, 'Temperature': temperatures, 'Latitude': latitude, 'Longitude': longitude})\r\n",
+					"#             weather_data_list.append(location_weather)\r\n",
+					"\r\n",
+					"#     if weather_data_list:\r\n",
+					"#         complete_weather_data = pd.concat(weather_data_list)\r\n",
+					"#         complete_weather_data['Date'] = pd.to_datetime(complete_weather_data['Date'], utc=True)\r\n",
+					"#         raw_data['Date'] = pd.to_datetime(raw_data['Date'], utc=True)\r\n",
+					"#         raw_data_final = pd.merge(raw_data, complete_weather_data, how='left', on=['Date', 'Latitude', 'Longitude'])\r\n",
+					"\r\n",
+					"#     raw_data_final.to_csv(f\"{ml_path}/raw_data_final.csv\", index=False)\r\n",
+					"#     print(raw_data_final.head())\r\n",
+					"\r\n",
+					"\r\n",
+					"\r\n",
+					""
+				],
+				"execution_count": 14
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"def fetch_weather_data(latitude, longitude, start_date, end_date):\r\n",
+					"    url = \"https://archive-api.open-meteo.com/v1/archive\"\r\n",
+					"    params = {\r\n",
+					"        \"latitude\": latitude,\r\n",
+					"        \"longitude\": longitude,\r\n",
+					"        \"start_date\": start_date,\r\n",
+					"        \"end_date\": end_date,\r\n",
+					"        \"hourly\": \"temperature_2m\",\r\n",
+					"        \"timezone\": \"auto\"\r\n",
+					"    }\r\n",
+					"    response = requests.get(url, params=params).json()\r\n",
+					"    if 'hourly' in response:\r\n",
+					"        times = response['hourly']['time']\r\n",
+					"        temperatures = response['hourly']['temperature_2m']\r\n",
+					"        return pd.to_datetime(times, utc=True), temperatures\r\n",
+					"    else:\r\n",
+					"        print(\"Failed to retrieve data:\", response)\r\n",
+					"        return None, None\r\n",
+					"print(\"fetch_weather_data Complete\")\r\n",
+					"\r\n",
+					"raw_data = pd.read_csv(f\"{ml_path}/raw_data.csv\", low_memory=False)\r\n",
+					"raw_data['Date'] = pd.to_datetime(raw_data['Date'])\r\n",
+					"# Extract Latitude and Longitude from 'location' every time the script runs\r\n",
+					"raw_data[['Latitude', 'Longitude']] = raw_data['location'].str.split(expand=True).astype(float)\r\n",
+					"raw_data = raw_data.dropna(subset=['Latitude', 'Longitude'])\r\n",
+					"\r\n",
+					"\r\n",
+					"# if not mssparkutils.fs.exists(f\"{ml_path}/raw_data_final.csv\"):\r\n",
+					"print(\"First Run: Fetching and processing Data....\")\r\n",
+					"\r\n",
+					"min_date = raw_data['Date'].min().strftime('%Y-%m-%d')\r\n",
+					"max_date = raw_data['Date'].max().strftime('%Y-%m-%d')\r\n",
+					"\r\n",
+					"unique_locations = raw_data[['Latitude', 'Longitude']].drop_duplicates()\r\n",
+					"weather_data_list = []\r\n",
+					"\r\n",
+					"for index, row in unique_locations.iterrows():\r\n",
+					"    latitude = row['Latitude']\r\n",
+					"    longitude = row['Longitude']\r\n",
+					"    times, temperatures = fetch_weather_data(latitude, longitude, min_date, max_date)\r\n",
+					"    if times is not None:\r\n",
+					"        location_weather = pd.DataFrame({'Date': times, 'Temperature': temperatures, 'Latitude': latitude, 'Longitude': longitude})\r\n",
+					"        weather_data_list.append(location_weather)\r\n",
+					"\r\n",
+					"if weather_data_list:\r\n",
+					"    complete_weather_data = pd.concat(weather_data_list)\r\n",
+					"    complete_weather_data['Date'] = complete_weather_data['Date'].dt.tz_localize(None).dt.strftime('%Y-%m-%d %H:%M:%S')\r\n",
+					"    raw_data['Date'] = raw_data['Date'].dt.tz_localize(None).dt.strftime('%Y-%m-%d %H:%M:%S')\r\n",
+					"    #complete_weather_data['Date'] = pd.to_datetime(complete_weather_data['Date'], utc=True)\r\n",
+					"    #raw_data['Date'] = pd.to_datetime(raw_data['Date'], utc=True)\r\n",
+					"    raw_data_final = pd.merge(raw_data, complete_weather_data, how='left', on=['Date', 'Latitude', 'Longitude'])\r\n",
+					"    raw_data_final.drop(columns=['Latitude', 'Longitude'], inplace=True)\r\n",
+					"\r\n",
+					"raw_data_final.to_csv(f\"{ml_path}/raw_data_final.csv\", index=False)\r\n",
+					"print(raw_data_final.head())\r\n",
+					"    \r\n",
+					"# else:\r\n",
+					"#     print(\"Not the first run: Fetching data for the previous day...\")\r\n",
+					"#     previous_day = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')  # Determine 'yesterday's' date\r\n",
+					"#     new_data_list = []  # Initialize an empty list to store new data frames\r\n",
+					"\r\n",
+					"#     # Iterate over the rows of the dataset to find entries from the previous day\r\n",
+					"#     for index, row in raw_data.iterrows():\r\n",
+					"#         if pd.to_datetime(row['Date']).strftime('%Y-%m-%d') == previous_day:\r\n",
+					"#             latitude = row['Latitude']\r\n",
+					"#             longitude = row['Longitude']\r\n",
+					"#             times, temperatures = fetch_weather_data(latitude, longitude, previous_day, previous_day)\r\n",
+					"#             if times is not None:\r\n",
+					"#                 # Create a DataFrame for each new set of data points fetched\r\n",
+					"#                 new_entries = pd.DataFrame({\r\n",
+					"#                     'Date': times,\r\n",
+					"#                     'Temperature': temperatures,\r\n",
+					"#                     'Latitude': [latitude] * len(times),\r\n",
+					"#                     'Longitude': [longitude] * len(times)\r\n",
+					"#                 })\r\n",
+					"#                 new_data_list.append(new_entries)  # Append the new DataFrame to the list\r\n",
+					"\r\n",
+					"#     # Use pandas.concat to combine all new data frames if any new data has been fetched\r\n",
+					"#     if new_data_list:\r\n",
+					"#         new_data_df = pd.concat(new_data_list, ignore_index=True)  # Concatenate all new data frames into one\r\n",
+					"#         new_data_df['Date'] = new_data_df['Date'].dt.strftime('%Y-%m-%d %H:%M:%S')\r\n",
+					"#         raw_data_final = pd.concat([raw_data, new_data_df], ignore_index=True)  # Concatenate the new data with the existing data\r\n",
+					"#         raw_data_final.drop(columns=['Latitude', 'Longitude'], inplace=True)\r\n",
+					"#         raw_data_final.to_csv(f\"{ml_path}/raw_data_final.csv\", index=False)  # Save the updated DataFrame back to CSV\r\n",
+					"#         print(\"Updated data for the previous day.\")\r\n",
+					"#         print(raw_data_final.head())\r\n",
+					"#     else:\r\n",
+					"#         print(\"No new data to update because data is already updated.\")"
+				],
+				"execution_count": 15
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"print(raw_data_final.head(20))"
+				],
+				"execution_count": 16
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## ML Ops"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# def fetch_weather_data(latitude, longitude, start_date, end_date):\r\n",
+					"#     url = \"https://archive-api.open-meteo.com/v1/archive\"\r\n",
+					"#     params = {\r\n",
+					"#         \"latitude\": latitude,\r\n",
+					"#         \"longitude\": longitude,\r\n",
+					"#         \"start_date\": start_date,\r\n",
+					"#         \"end_date\": end_date,\r\n",
+					"#         \"hourly\": \"temperature_2m\",\r\n",
+					"#         \"timezone\": \"auto\"\r\n",
+					"#     }\r\n",
+					"#     response = requests.get(url, params=params).json()\r\n",
+					"#     if 'hourly' in response:\r\n",
+					"#         times = response['hourly']['time']\r\n",
+					"#         temperatures = response['hourly']['temperature_2m']\r\n",
+					"#         return pd.to_datetime(times, utc=True), temperatures\r\n",
+					"#     else:\r\n",
+					"#         print(\"Failed to retrieve data:\", response)\r\n",
+					"#         return None, None\r\n",
+					"# print(\"fetch_weather_data Complete\")\r\n",
+					"\r\n",
+					"# raw_data = pd.read_csv(f\"{ml_path}/raw_data.csv\", low_memory=False)\r\n",
+					"# raw_data['Date'] = pd.to_datetime(raw_data['Date'])\r\n",
+					"# # Extract Latitude and Longitude from 'location' every time the script runs\r\n",
+					"# raw_data[['Latitude', 'Longitude']] = raw_data['location'].str.split(expand=True).astype(float)\r\n",
+					"# raw_data = raw_data.dropna(subset=['Latitude', 'Longitude'])\r\n",
+					"\r\n",
+					"\r\n",
+					"# if not mssparkutils.fs.exists(f\"{ml_path}/raw_data_final.csv\"):\r\n",
+					"#     print(\"First Run: Fetching and processing Data....\")\r\n",
+					"\r\n",
+					"#     min_date = raw_data['Date'].min().strftime('%Y-%m-%d')\r\n",
+					"#     max_date = raw_data['Date'].max().strftime('%Y-%m-%d')\r\n",
+					"\r\n",
+					"#     unique_locations = raw_data[['Latitude', 'Longitude']].drop_duplicates()\r\n",
+					"#     weather_data_list = []\r\n",
+					"\r\n",
+					"#     for index, row in unique_locations.iterrows():\r\n",
+					"#         latitude = row['Latitude']\r\n",
+					"#         longitude = row['Longitude']\r\n",
+					"#         times, temperatures = fetch_weather_data(latitude, longitude, min_date, max_date)\r\n",
+					"#         if times is not None:\r\n",
+					"#             location_weather = pd.DataFrame({'Date': times, 'Temperature': temperatures, 'Latitude': latitude, 'Longitude': longitude})\r\n",
+					"#             weather_data_list.append(location_weather)\r\n",
+					"\r\n",
+					"#     if weather_data_list:\r\n",
+					"#         complete_weather_data = pd.concat(weather_data_list)\r\n",
+					"#         complete_weather_data['Date'] = complete_weather_data['Date'].dt.tz_localize(None).dt.strftime('%Y-%m-%d %H:%M:%S')\r\n",
+					"#         raw_data['Date'] = raw_data['Date'].dt.tz_localize(None).dt.strftime('%Y-%m-%d %H:%M:%S')\r\n",
+					"#         #complete_weather_data['Date'] = pd.to_datetime(complete_weather_data['Date'], utc=True)\r\n",
+					"#         #raw_data['Date'] = pd.to_datetime(raw_data['Date'], utc=True)\r\n",
+					"#         raw_data_final = pd.merge(raw_data, complete_weather_data, how='left', on=['Date', 'Latitude', 'Longitude'])\r\n",
+					"#         raw_data_final.drop(columns=['Latitude', 'Longitude'], inplace=True)\r\n",
+					"\r\n",
+					"#     raw_data_final.to_csv(f\"{ml_path}/raw_data_final.csv\", index=False)\r\n",
+					"#     print(raw_data_final.head())\r\n",
+					"    \r\n",
+					"# else:\r\n",
+					"#     print(\"Not the first run: Fetching data for the previous day...\")\r\n",
+					"#     previous_day = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')  # Determine 'yesterday's' date\r\n",
+					"#     new_data_list = []  # Initialize an empty list to store new data frames\r\n",
+					"\r\n",
+					"#     # Iterate over the rows of the dataset to find entries from the previous day\r\n",
+					"#     for index, row in raw_data.iterrows():\r\n",
+					"#         if pd.to_datetime(row['Date']).strftime('%Y-%m-%d') == previous_day:\r\n",
+					"#             latitude = row['Latitude']\r\n",
+					"#             longitude = row['Longitude']\r\n",
+					"#             times, temperatures = fetch_weather_data(latitude, longitude, previous_day, previous_day)\r\n",
+					"#             if times is not None:\r\n",
+					"#                 # Create a DataFrame for each new set of data points fetched\r\n",
+					"#                 new_entries = pd.DataFrame({\r\n",
+					"#                     'Date': times,\r\n",
+					"#                     'Temperature': temperatures,\r\n",
+					"#                     'Latitude': [latitude] * len(times),\r\n",
+					"#                     'Longitude': [longitude] * len(times)\r\n",
+					"#                 })\r\n",
+					"#                 new_data_list.append(new_entries)  # Append the new DataFrame to the list\r\n",
+					"\r\n",
+					"#     # Use pandas.concat to combine all new data frames if any new data has been fetched\r\n",
+					"#     if new_data_list:\r\n",
+					"#         new_data_df = pd.concat(new_data_list, ignore_index=True)  # Concatenate all new data frames into one\r\n",
+					"#         new_data_df['Date'] = new_data_df['Date'].dt.strftime('%Y-%m-%d %H:%M:%S')\r\n",
+					"#         raw_data_final = pd.concat([raw_data, new_data_df], ignore_index=True)  # Concatenate the new data with the existing data\r\n",
+					"#         raw_data_final.drop(columns=['Latitude', 'Longitude'], inplace=True)\r\n",
+					"#         raw_data_final.to_csv(f\"{ml_path}/raw_data_final.csv\", index=False)  # Save the updated DataFrame back to CSV\r\n",
+					"#         print(\"Updated data for the previous day.\")\r\n",
+					"#         print(raw_data_final.head())\r\n",
+					"#     else:\r\n",
+					"#         print(\"No new data to update because data is already updated.\")"
+				],
+				"execution_count": 20
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"number_of_rows = raw_data_final.shape[0]\r\n",
+					"print(\"Number of rows:\", number_of_rows)"
+				],
+				"execution_count": 17
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"print(raw_data_final.columns)"
+				],
+				"execution_count": 24
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"raw_ml = pd.read_csv(f\"{ml_path}/raw_data_final.csv\",low_memory=False)\r\n",
+					"print(raw_ml.head(2))"
+				],
+				"execution_count": 86
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"print(raw_ml['description'].unique())\r\n",
+					""
+				],
+				"execution_count": 88
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"print(raw_ml.columns)\r\n",
+					""
+				],
+				"execution_count": 89
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#2024-04-21 18:00:00\r\n",
+					"#%d/%m/%YT%H:%M:%S\r\n",
+					"# Convert date column to datetime\r\n",
+					"raw_ml['Date'] = pd.to_datetime(raw_ml['Date'], format='%Y-%m-%d %H:%M:%S')\r\n",
+					"\r\n",
+					"# Extract features from date\r\n",
+					"raw_ml['Hour'] = raw_ml['Date'].dt.hour\r\n",
+					"raw_ml['DayOfWeek'] = raw_ml['Date'].dt.dayofweek\r\n",
+					"raw_ml['Month'] = raw_ml['Date'].dt.month\r\n",
+					"\r\n",
+					"# Select one subcategory to model, e.g., 'River Level'\r\n",
+					"raw_reservoir = raw_ml[raw_ml['description'] == 'Reservoir volume'].copy()\r\n",
+					"\r\n",
+					"# Fill missing values if necessary\r\n",
+					"if raw_reservoir.empty:\r\n",
+					"    print(\"No data matches the filter condition.\")\r\n",
+					"else:\r\n",
+					"    raw_reservoir['Reading'].fillna(method='ffill', inplace=True)\r\n",
+					"    # Proceed with your data split and further analysis\r\n",
+					"\r\n",
+					"\r\n",
+					"# Splitting the data\r\n",
+					"X = raw_reservoir[['Hour', 'DayOfWeek', 'Month']]\r\n",
+					"y = raw_reservoir['Reading']\r\n",
+					"\r\n",
+					"if len(X) > 1:\r\n",
+					"    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, shuffle=False)\r\n",
+					"    scaler = StandardScaler()\r\n",
+					"    X_train_scaled = scaler.fit_transform(X_train)\r\n",
+					"    X_test_scaled = scaler.transform(X_test)\r\n",
+					"else:\r\n",
+					"    print(\"Not Enough Data To Split.\")\r\n",
+					"# Model Training\r\n",
+					"\r\n",
+					"model = LinearRegression()\r\n",
+					"model.fit(X_train_scaled, y_train)\r\n",
+					"\r\n",
+					"# Model Evaluation\r\n",
+					"y_pred = model.predict(X_test_scaled)\r\n",
+					"rmse = mean_squared_error(y_test, y_pred, squared=False)\r\n",
+					"print(f'RMSE: {rmse}')\r\n",
+					"\r\n",
+					""
+				],
+				"execution_count": 90
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"print(\"Available column names:\", raw_reservoir.columns)"
+				],
+				"execution_count": 91
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Define the features list including both date-time and lagged features\r\n",
+					"features = ['Hour', 'DayOfWeek', 'Month'] + [f'Reading_lag_{lag}' for lag in [6, 12, 18, 24]]\r\n",
+					"\r\n",
+					"# Prepare future dates for prediction\r\n",
+					"future_dates = pd.date_range(start=raw_reservoir['Date'].max(), periods=5, freq='6H')\r\n",
+					"future_data = pd.DataFrame(future_dates, columns=['Date'])\r\n",
+					"future_data['Hour'] = future_data['Date'].dt.hour\r\n",
+					"future_data['DayOfWeek'] = future_data['Date'].dt.dayofweek\r\n",
+					"future_data['Month'] = future_data['Date'].dt.month\r\n",
+					"\r\n",
+					"# Add lag features to future data\r\n",
+					"# Ensuring the correct lag values are used from the latest available data points\r\n",
+					"for lag in [6, 12, 18, 24]:\r\n",
+					"    # Make sure there are enough data points; if not, handle the potential IndexError\r\n",
+					"    try:\r\n",
+					"        future_data[f'Reading_lag_{lag}'] = [raw_reservoir['Reading'].iloc[-lag] for _ in future_dates]\r\n",
+					"    except IndexError:\r\n",
+					"        # If there aren't enough past data points to refer to, use the last available reading\r\n",
+					"        future_data[f'Reading_lag_{lag}'] = raw_reservoir['Reading'].iloc[-1]\r\n",
+					"\r\n",
+					"# Scale the future data\r\n",
+					"future_data_scaled = scaler.transform(future_data[features])\r\n",
+					"\r\n",
+					"# Predicting future values using the trained model\r\n",
+					"future_predictions = model.predict(future_data_scaled)\r\n",
+					"print(f'Future Predictions: {future_predictions}')\r\n",
+					""
+				],
+				"execution_count": 53
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": true,
+						"outputs_hidden": true
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# import openmeteo_requests\r\n",
+					"\r\n",
+					"# import requests_cache\r\n",
+					"# import pandas as pd\r\n",
+					"# from retry_requests import retry\r\n",
+					"\r\n",
+					"# # Setup the Open-Meteo API client with cache and retry on error\r\n",
+					"# cache_session = requests_cache.CachedSession('.cache', expire_after = -1)\r\n",
+					"# retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)\r\n",
+					"# openmeteo = openmeteo_requests.Client(session = retry_session)\r\n",
+					"\r\n",
+					"# # Make sure all required weather variables are listed here\r\n",
+					"# # The order of variables in hourly or daily is important to assign them correctly below\r\n",
+					"# url = \"https://archive-api.open-meteo.com/v1/archive\"\r\n",
+					"# params = {\r\n",
+					"# \t\"latitude\": 42.3198,\r\n",
+					"# \t\"longitude\": 2.7889,\r\n",
+					"# \t\"start_date\": \"2024-01-12\",\r\n",
+					"# \t\"end_date\": \"2024-04-21\",\r\n",
+					"# \t\"hourly\": \"temperature_2m\",\r\n",
+					"# \t\"timezone\": \"Europe/Berlin\"\r\n",
+					"# }\r\n",
+					"# responses = openmeteo.weather_api(url, params=params)\r\n",
+					"\r\n",
+					"# # Process first location. Add a for-loop for multiple locations or weather models\r\n",
+					"# response = responses[0]\r\n",
+					"# print(f\"Coordinates {response.Latitude()}°N {response.Longitude()}°E\")\r\n",
+					"# print(f\"Elevation {response.Elevation()} m asl\")\r\n",
+					"# print(f\"Timezone {response.Timezone()} {response.TimezoneAbbreviation()}\")\r\n",
+					"# print(f\"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s\")\r\n",
+					"\r\n",
+					"# # Process hourly data. The order of variables needs to be the same as requested.\r\n",
+					"# hourly = response.Hourly()\r\n",
+					"# hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()\r\n",
+					"\r\n",
+					"# hourly_data = {\"date\": pd.date_range(\r\n",
+					"# \tstart = pd.to_datetime(hourly.Time(), unit = \"s\", utc = True),\r\n",
+					"# \tend = pd.to_datetime(hourly.TimeEnd(), unit = \"s\", utc = True),\r\n",
+					"# \tfreq = pd.Timedelta(seconds = hourly.Interval()),\r\n",
+					"# \tinclusive = \"left\"\r\n",
+					"# )}\r\n",
+					"# hourly_data[\"temperature_2m\"] = hourly_temperature_2m\r\n",
+					"\r\n",
+					"# hourly_dataframe = pd.DataFrame(data = hourly_data)\r\n",
+					"# print(hourly_dataframe)"
+				],
+				"execution_count": 75
+			}
+		]
+	}
+}

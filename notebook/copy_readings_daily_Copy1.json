@@ -1,0 +1,1359 @@
+{
+	"name": "copy_readings_daily_Copy1",
+	"properties": {
+		"folder": {
+			"name": "Other Files"
+		},
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "WaterSparkPool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "f4b62dee-1aba-4ad9-8aa0-28a7182f3c84"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/e6a89ab3-ce27-4148-bad8-97a6fee2010c/resourceGroups/FergusAssam/providers/Microsoft.Synapse/workspaces/water-crisis/bigDataPools/WaterSparkPool",
+				"name": "WaterSparkPool",
+				"type": "Spark",
+				"endpoint": "https://water-crisis.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/WaterSparkPool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.3",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# <div style=\"color:#fff;display:fill;border-radius:15px;background-color:#328ada;text-align:left;letter-spacing:0.1px;overflow:hidden;padding:5px;color:white;overflow:hidden;margin:0;font-size:80%\">Epic Internship</div>"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## <div style=\"color:#fff;display:fill;border-radius:10px;background-color:#328ada;text-align:left;letter-spacing:0.1px;overflow:hidden;padding:20px;color:white;overflow:hidden;margin:0;font-size:80%\"> 🔧📗ET Code for the \"🏞️Catalonia Water Resource Daily🚰\" Dataset.</div>\r\n",
+					"\r\n",
+					"This Notebook is, **scheduled** to run automatically on a **daily** basis in a pipeline, in order to extract information from the public API of the [ACA - Agència Catalana de l'Aigua](https://aca.gencat.cat/) (Catalan Water Agency). This API contains the **real-time value reads from 4 types of sensors** (Reservoir Level Sensors, Gauging Sensors, Pluviometer Sensors, and Piezometer Sensors) placed around the **Catalan region** in Spain. It also contains Metadata information which is extracted and saved in another supplementary Notebook(copy_metadata_monthly), and later imported here.\r\n",
+					"\r\n",
+					"#### Internship Business Case:\r\n",
+					"\r\n",
+					"Catalonia is currently experiencing a dry period, characterized by reduced precipitation and lower-than-average water levels in reservoirs and rivers as well as in other regions. Struggling with water reserve levels already, the goal of this internship is to come up with actionable insights that will help the government make informed decisions and solutions that will benefit the community and the region at large.\r\n",
+					"\r\n",
+					"##### Note:\r\n",
+					"Data is uploaded from the sensors at different time intervals but the data is collected and average taken for the closet time on all the 4 categories.\r\n",
+					"\r\n",
+					"## <div style=\"color:#fff;display:fill;border-radius:15px;background-color:#328ada;text-align:left;letter-spacing:0.1px;overflow:hidden;padding:5px;color:white;overflow:hidden;margin:0;font-size:80%\"></div>\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Parameters and Libraries"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Create a parameter that will be used to change read folder and mode dynamically in the pipeline"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"tags": [
+						"parameters"
+					]
+				},
+				"source": [
+					"# Get the version of the folder from the Bronze layer and this will be used as a parameter in the pipeline (Toggled as a parameter)\r\n",
+					"FolderName = \"Version_370\"\r\n",
+					"Mode = \"overwrite\" \r\n",
+					"MetaFolder = \"Metadata\"\r\n",
+					"category = ['reservoir','gauge','pluviometer', 'piezometer']\r\n",
+					"meta_end = '_sensors_metadata'\r\n",
+					"sensors_end = '_sensors_reads'\r\n",
+					"#For the first time it overwrites and for subsequent notebooks, it apppends which is adjusted via the pipeline\r\n",
+					"# Also live data can be extracted from the API."
+				],
+				"execution_count": 2
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Generate the dataset Folder incrementally"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"FolderName_SeperatorRemoved = FolderName.replace(\"_\",\"\")\r\n",
+					"VersionName = FolderName.split('_')[0]\r\n",
+					"VersionNum = FolderName.split('_')[1]"
+				],
+				"execution_count": 3
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Import Libraries"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from pyspark.sql import SparkSession\r\n",
+					"from pyspark.sql import functions as F, Row\r\n",
+					"from pyspark.sql.functions import lit,col,regexp_replace,to_date,count,sum,coalesce,to_timestamp #add constant or literal value as a new column to the DataFrame. #regexp_replace to replace a character in a string\r\n",
+					"from pyspark.sql.types import DateType\r\n",
+					"from datetime import datetime, timedelta\r\n",
+					"from tqdm.notebook import tqdm\r\n",
+					"import re\r\n",
+					"from pathlib import Path\r\n",
+					"import matplotlib.pyplot as plt\r\n",
+					"from scipy.stats import zscore\r\n",
+					"import pandas as pd\r\n",
+					"import numpy as np\r\n",
+					"import requests,json,os\r\n",
+					"from pathlib import Path\r\n",
+					"spark.sql(\"set spark.sql.legacy.timeParserPolicy=LEGACY\")\r\n",
+					"#If you check the schema table, you will notice the column Timestamp is stored as (M.D.Y.hh.mm). \r\n",
+					"#inorder to handle unforseen exception error. eg October, Oct ,oct, 10, we use the timeParserPolicy=LEGACY to fix this."
+				],
+				"execution_count": 4
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Create Connections"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Spark Session & blob connection\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#Create Spark Session and connection to blob storage. It is created in the Notebook and not in the pipeline. \r\n",
+					"#You can only set Spark configuration properties that start with the spark.sql prefix.\r\n",
+					"\"\"\"You can have many spark sessions but only 1 spark context (like spark driver). It is better in the notebook because\r\n",
+					"It already has access to the underlying Spark features for creating RDD and dataframe.\"\"\"\r\n",
+					"\r\n",
+					"blob_account = \"waterstorageaccount\"\r\n",
+					"blob_container = \"BronzeLayer\"\r\n",
+					"\r\n",
+					"sc = SparkSession.builder.getOrCreate()\r\n",
+					"#getConnectionString()\r\n",
+					"token_library = sc._jvm.com.microsoft.azure.synapse.tokenlibrary.TokenLibrary\r\n",
+					"dls_sas_token = token_library.getConnectionString(\"water-crisis-WorkspaceDefaultStorage\")\r\n",
+					"spark.conf.set(\r\n",
+					"    'fs.azure.sas.{}.{}.blob.core.windows.net' .format(blob_container, blob_account),\r\n",
+					"    dls_sas_token)\r\n",
+					"\r\n",
+					"#https://projectwatercrisis.dfs.core.windows.net/waterstorageaccount/BronzeLayer/Version_322/gauge_sensors_reads.csv\r\n",
+					""
+				],
+				"execution_count": 5
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Dynamic Delimiter"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Use Regex to read the header, determine the delimiter from a set of predefined common delimiters \r\n",
+					"# and store it as a variable then use that variable as a delimiter\r\n",
+					"def f_get_delimiter (source_path):\r\n",
+					"    try:\r\n",
+					"        print(\"Source Path:\", source_path)  # Debug: Print the source path\r\n",
+					"        headerlist = spark.sparkContext.textFile(source_path).take(1)\r\n",
+					"        header_str = ''.join(headerlist)\r\n",
+					"\r\n",
+					"        results= re.search(\"(,|;|\\\\|)\",header_str)\r\n",
+					"        return results.group()\r\n",
+					"    except Exception as err:\r\n",
+					"        print(\"Error Occured \", str(err))"
+				],
+				"execution_count": 6
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Import Metadatas"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"gauge_meta_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}/{MetaFolder}/{category[1]}{meta_end}.csv\"\r\n",
+					"reservoir_meta_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}/{MetaFolder}/{category[0]}{meta_end}.csv\"\r\n",
+					"pluviometer_meta_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}/{MetaFolder}/{category[2]}{meta_end}.csv\"\r\n",
+					"piezometer_meta_path= f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}/{MetaFolder}/{category[3]}{meta_end}.csv\"\r\n",
+					"\r\n",
+					"#print(f\"'abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}/{MetaFolder}/{category[-2]}_sensors_metadata'\")\r\n",
+					"#print(f\"'abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}/{MetaFolder}/{category[3]}{meta_end}\")"
+				],
+				"execution_count": 7
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Dynamic Delimiter"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"gauge_delimiter = (f_get_delimiter(gauge_meta_path))\r\n",
+					"print('Gauge Delimiter: ' + gauge_delimiter)\r\n",
+					"piezometer_delimiter = (f_get_delimiter(piezometer_meta_path))\r\n",
+					"print('Piezometer Delimiter: ' + piezometer_delimiter)\r\n",
+					"pluviometer_delimiter = (f_get_delimiter(pluviometer_meta_path))\r\n",
+					"print('Pluviometer Delimiter: ' + pluviometer_delimiter)\r\n",
+					"reservoir_delimiter = (f_get_delimiter(reservoir_meta_path))\r\n",
+					"print('Reservoir Delimiter: ' + reservoir_delimiter)"
+				],
+				"execution_count": 8
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Load"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# f\"{category[0]}{meta_end}\" = spark.read.load(gauge_meta_path, format = 'csv',inferschema = True,header=true,delimiter=gauge_delimiter)"
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"gauge_sensors_metadata = spark.read.load(gauge_meta_path, format = 'csv',inferschema = True,header=True,delimiter=gauge_delimiter)\r\n",
+					"reservoir_sensors_metadata = spark.read.load(reservoir_meta_path, format = 'csv',inferschema = True,header=True,delimiter=reservoir_delimiter)\r\n",
+					"pluviometer_sensors_metadata = spark.read.load(pluviometer_meta_path, format = 'csv',inferschema = True,header=True,delimiter=pluviometer_delimiter)\r\n",
+					"piezometer_sensors_metadata = spark.read.load(piezometer_meta_path, format = 'csv',inferschema = True,header=True,delimiter=piezometer_delimiter)\r\n",
+					"\r\n",
+					"print(\"All Metadata Loaded\")\r\n",
+					""
+				],
+				"execution_count": 10
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Extract Sensor ids\r\n",
+					"Sensor ids will be extracted from the metadata and used to create the sensor readings dataframe"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"# display(reservoir_sensors_metadata)"
+				],
+				"execution_count": 11
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Reservoir"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Get sensor IDs from the DataFrame\r\n",
+					"reservoir_sensors_ids = reservoir_sensors_metadata.select(\"sensor_id\").toPandas()\r\n",
+					"#print(\"\\nSensor IDs:\")\r\n",
+					"#reservoir_sensors_ids.show()\r\n",
+					"\r\n",
+					"# Group by description and count occurrences\r\n",
+					"description_counts = reservoir_sensors_metadata.groupBy(\"description\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"print(\"\\nDescriptions:\")\r\n",
+					"description_counts.show()\r\n",
+					"\r\n",
+					"# Group by unit and count occurrences\r\n",
+					"unit_counts = reservoir_sensors_metadata.groupBy(\"unit\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"print(\"\\nUnits:\")\r\n",
+					"unit_counts.show()"
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Piezometer"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Get sensor IDs from the DataFrame\r\n",
+					"piezometer_sensors_ids = piezometer_sensors_metadata.select(\"sensor_id\").toPandas()\r\n",
+					"#print(\"\\nSensor IDs:\")\r\n",
+					"#piezometer_sensors_ids.show()\r\n",
+					"\r\n",
+					"# Group by description and count occurrences\r\n",
+					"description_counts = piezometer_sensors_metadata.groupBy(\"description\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"print(\"\\nDescriptions:\")\r\n",
+					"description_counts.show()\r\n",
+					"\r\n",
+					"# Group by unit and count occurrences\r\n",
+					"unit_counts = piezometer_sensors_metadata.groupBy(\"unit\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"print(\"\\nUnits:\")\r\n",
+					"unit_counts.show()"
+				],
+				"execution_count": 13
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Pluviometer"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Get sensor IDs from the DataFrame\r\n",
+					"pluviometer_sensors_ids = pluviometer_sensors_metadata.select(\"sensor_id\").toPandas()\r\n",
+					"#print(\"\\nSensor IDs:\")\r\n",
+					"#pluviometer_sensors_ids.show()\r\n",
+					"\r\n",
+					"# Group by description and count occurrences\r\n",
+					"description_counts = pluviometer_sensors_metadata.groupBy(\"description\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"print(\"\\nDescriptions:\")\r\n",
+					"description_counts.show()\r\n",
+					"\r\n",
+					"# Group by unit and count occurrences\r\n",
+					"unit_counts = pluviometer_sensors_metadata.groupBy(\"unit\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"print(\"\\nUnits:\")\r\n",
+					"unit_counts.show()"
+				],
+				"execution_count": 14
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Gauge"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Get sensor IDs from the DataFrame\r\n",
+					"gauge_sensors_ids = gauge_sensors_metadata.select(\"sensor_id\").toPandas()\r\n",
+					"#print(\"\\nSensor IDs:\")\r\n",
+					"#gauge_sensors_ids.show()\r\n",
+					"\r\n",
+					"# Group by description and count occurrences\r\n",
+					"description_counts = gauge_sensors_metadata.groupBy(\"description\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"print(\"\\nDescriptions:\")\r\n",
+					"description_counts.show()\r\n",
+					"\r\n",
+					"# Group by unit and count occurrences\r\n",
+					"unit_counts = gauge_sensors_metadata.groupBy(\"unit\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"print(\"\\nUnits:\")\r\n",
+					"unit_counts.show()"
+				],
+				"execution_count": 15
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# The sensors ids will be the names of the columns of the DataFrames where the read values will be stored\r\n",
+					"groups_cols_ids = [reservoir_sensors_ids, gauge_sensors_ids, pluviometer_sensors_ids, piezometer_sensors_ids]\r\n",
+					"# print(groups_cols_ids)"
+				],
+				"execution_count": 16
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Data Extraction And Transformation"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Load API Files"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### API Links"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Sensors Data Endpoints\r\n",
+					"\r\n",
+					"URL_RESERVOIR_DATA = 'http://aca-web.gencat.cat/sdim2/apirest/data/EMBASSAMENT-EST'\r\n",
+					"URL_GAUGE_DATA = 'http://aca-web.gencat.cat/sdim2/apirest/data/AFORAMENT-EST'\r\n",
+					"URL_PLUVIOMETER_DATA = 'http://aca-web.gencat.cat/sdim2/apirest/data/PLUVIOMETREACA-EST'\r\n",
+					"URL_PIEZOMETER_DATA = 'http://aca-web.gencat.cat/sdim2/apirest/data/PIEZOMETRE-EST'\r\n",
+					"\r\n",
+					"urls_data = [URL_RESERVOIR_DATA, URL_GAUGE_DATA, URL_PLUVIOMETER_DATA, URL_PIEZOMETER_DATA]"
+				],
+				"execution_count": 17
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Extract API Data"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Function to extract data from API endpoints\r\n",
+					"def extract_data_from_api(url):\r\n",
+					"    response = requests.get(url)\r\n",
+					"    \r\n",
+					"    # Check if the request was successful (status code 200)\r\n",
+					"    if response.status_code == 200:\r\n",
+					"        json_data = response.json()\r\n",
+					"        return json_data\r\n",
+					"    else:\r\n",
+					"        print(f\"Failed to fetch data from {url}: Status Code {response.status_code}\")\r\n",
+					"        return None"
+				],
+				"execution_count": 18
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Get Sensors Data"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# def all_dfs_sensors_day(read_date_dt=datetime.now()-timedelta(days=1), groups_cols_ids=None, urls_data=None):\r\n",
+					"#     if groups_cols_ids is None or urls_data is None:\r\n",
+					"#         print(\"Please provide groups_cols_ids and urls_data\")\r\n",
+					"#         return\r\n",
+					"    \r\n",
+					"#     all_dfs_sensors_day = []\r\n",
+					"    \r\n",
+					"#     for cols_ids, url_data in zip(groups_cols_ids, urls_data):\r\n",
+					"#         df_sensor_data_day = pd.DataFrame(columns=cols_ids)\r\n",
+					"        \r\n",
+					"#         time_ranges = [read_date_dt.replace(hour=i, minute=0, second=0, microsecond=0) for i in [0, 6, 12, 18]]\r\n",
+					"#         for tr in time_ranges:\r\n",
+					"#             dt_from = tr - timedelta(hours=6)\r\n",
+					"#             dt_to = tr\r\n",
+					"#             data_day = extract_data_from_api(url_data + f\"/?limit=5&from={dt_from.strftime('%d/%m/%YT%H:%M:%S')}&to={(dt_to + timedelta(hours=6)).strftime('%d/%m/%YT%H:%M:%S')}\")\r\n",
+					"            \r\n",
+					"#             sensor_data = {}\r\n",
+					"#             for sensor in data_day[\"sensors\"]:\r\n",
+					"#                 sensor_id = sensor[\"sensor\"]\r\n",
+					"#                 if sensor[\"observations\"]:\r\n",
+					"#                     value = np.mean([float(obs[\"value\"]) for obs in sensor[\"observations\"]]).round(4)\r\n",
+					"#                     sensor_data[sensor_id] = value\r\n",
+					"            \r\n",
+					"#             # Append a new row to the DataFrame\r\n",
+					"#             df_sensor_data_day = pd.concat([df_sensor_data_day, pd.DataFrame(sensor_data, index=[dt_to])], axis=0)\r\n",
+					"        \r\n",
+					"#         print(df_sensor_data_day)\r\n",
+					"#         all_dfs_sensors_day.append(df_sensor_data_day)\r\n",
+					"        \r\n",
+					"#     return all_dfs_sensors_day"
+				],
+				"execution_count": 19
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"def get_sensors_data_day(read_date_dt=datetime.now()-timedelta(days=1), groups_cols_ids=groups_cols_ids, urls_data=urls_data):\r\n",
+					"    \r\n",
+					"    all_dfs_sensors_day = []\r\n",
+					"    \r\n",
+					"    for cols_ids, url_data in zip(groups_cols_ids, urls_data):\r\n",
+					"        df_sensor_data_day = pd.DataFrame(columns=cols_ids)\r\n",
+					"        \r\n",
+					"        time_ranges = [read_date_dt.replace(hour=i, minute=0, second=0, microsecond=0) for i in [0, 6, 12, 18]]\r\n",
+					"        for tr in time_ranges:\r\n",
+					"            dt_from = tr - timedelta(hours=6)\r\n",
+					"            dt_to = tr\r\n",
+					"            #print(url_data + f\"/?limit=5&from={dt_from.strftime('%d/%m/%YT%H:%M:%S')}&to={(dt_to).strftime('%d/%m/%YT%H:%M:%S')}\")\r\n",
+					"            data_day = extract_data_from_api(url_data + f\"/?limit=5&from={dt_from.strftime('%d/%m/%YT%H:%M:%S')}&to={(dt_to + timedelta(hours=6)).strftime('%d/%m/%YT%H:%M:%S')}\")\r\n",
+					"            \r\n",
+					"            for sensor in data_day[\"sensors\"]:\r\n",
+					"                sensor_id = sensor[\"sensor\"]\r\n",
+					"                #print(\"sensor_id:\", sensor_id, end=\" \")\r\n",
+					"                # averaging up to the last 5 reads to get a more steady value\r\n",
+					"                if sensor[\"observations\"]:\r\n",
+					"                    value = np.mean([float(obs[\"value\"]) for obs in sensor[\"observations\"]]).round(4)\r\n",
+					"                    df_sensor_data_day.loc[dt_to, sensor_id] = value\r\n",
+					"        #print(df_sensor_data_day)      \r\n",
+					"        all_dfs_sensors_day.append(df_sensor_data_day)\r\n",
+					"        \r\n",
+					"    return all_dfs_sensors_day\r\n",
+					"    "
+				],
+				"execution_count": 20
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"def get_sensors_data_day(read_date_dt=datetime.now()-timedelta(days=1), groups_cols_ids=groups_cols_ids, urls_data=urls_data):\r\n",
+					"    all_dfs_sensors_day = []\r\n",
+					"    \r\n",
+					"    for cols_ids, url_data in zip(groups_cols_ids, urls_data):\r\n",
+					"        rows = []\r\n",
+					"        time_ranges = [read_date_dt.replace(hour=i, minute=0, second=0, microsecond=0) for i in [0, 6, 12, 18]]\r\n",
+					"        \r\n",
+					"        for tr in time_ranges:\r\n",
+					"            dt_from = tr - timedelta(hours=6)\r\n",
+					"            dt_to = tr\r\n",
+					"            \r\n",
+					"            data_day = extract_data_from_api(url_data + f\"/?limit=5&from={dt_from.strftime('%d/%m/%YT%H:%M:%S')}&to={(dt_to + timedelta(hours=6)).strftime('%d/%m/%YT%H:%M:%S')}\")\r\n",
+					"            \r\n",
+					"            for sensor in data_day[\"sensors\"]:\r\n",
+					"                sensor_id = sensor[\"sensor\"]\r\n",
+					"                \r\n",
+					"                if sensor[\"observations\"]:\r\n",
+					"                    value = np.mean([float(obs[\"value\"]) for obs in sensor[\"observations\"]]).round(4)\r\n",
+					"                    rows.append({\"DateTime\": dt_to, \"SensorID\": sensor_id, \"Value\": value})\r\n",
+					"        \r\n",
+					"        # Create DataFrame from list of dictionaries\r\n",
+					"        df_sensor_data_day = pd.DataFrame(rows)\r\n",
+					"        all_dfs_sensors_day.append(df_sensor_data_day)\r\n",
+					"        \r\n",
+					"    return all_dfs_sensors_day\r\n",
+					""
+				],
+				"execution_count": 28
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# print(all_dfs_sensors_day())\r\n",
+					"# print(urls_data)\r\n",
+					"# print(groups_cols_ids)"
+				],
+				"execution_count": 21
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Assuming you have defined groups_cols_ids and urls_data\r\n",
+					"# result = all_dfs_sensors_day(groups_cols_ids=groups_cols_ids, urls_data=urls_data)\r\n",
+					"# print(result)\r\n",
+					""
+				],
+				"execution_count": 22
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Import Previous Data"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Importing all previous data\r\n",
+					"# Define the list of file paths for old data\r\n",
+					"#DATA_PATH = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}\"\r\n",
+					"DATA_PATH = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/Version_322\"\r\n",
+					"list_paths_old_data = [\r\n",
+					"    DATA_PATH + f\"/{category[0]}{sensors_end}.csv\",\r\n",
+					"    DATA_PATH + f\"/{category[1]}{sensors_end}.csv\",\r\n",
+					"    DATA_PATH + f\"/{category[2]}{sensors_end}.csv\",\r\n",
+					"    DATA_PATH + f\"/{category[3]}{sensors_end}.csv\",\r\n",
+					"]\r\n",
+					"#direct file system operations (such as checking if a file exists) within Azure Synapse Analytics are not supported.\r\n",
+					"# if os.path.exists(list_paths_old_data[0]):\r\n",
+					"#     list_all_old_data = [pd.read_csv(path_old_data, parse_dates=[0], index_col=0) for path_old_data in list_paths_old_data]\r\n",
+					"# else:\r\n",
+					"#     list_all_old_data = None   \r\n",
+					"    \r\n",
+					"# Check if the files exist\r\n",
+					"if all(os.path.exists(path) for path in list_paths_old_data):\r\n",
+					"    # Read existing CSV files into Pandas DataFrames\r\n",
+					"    list_all_old_data = [pd.read_csv(path, parse_dates=[0], index_col=0) for path in list_paths_old_data]\r\n",
+					"else:\r\n",
+					"    list_all_old_data = None\r\n",
+					""
+				],
+				"execution_count": 31
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# # List to store DataFrames for each file\r\n",
+					"# dfs = []\r\n",
+					"\r\n",
+					"# # Loop through each file path and read CSV file into a DataFrame\r\n",
+					"# for file_path in list_paths_old_data:\r\n",
+					"#     try:\r\n",
+					"#         df = pd.read_csv(file_path)\r\n",
+					"#         dfs.append(df)\r\n",
+					"#         print(f\"Successfully read data from: {file_path}\")\r\n",
+					"#     except Exception as e:\r\n",
+					"#         print(f\"Error reading data from {file_path}: {str(e)}\")\r\n",
+					""
+				],
+				"execution_count": 24
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Update"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Normal daily update\r\n",
+					"read_date_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)\r\n",
+					"print(\"Old data found, requesting and updating previous day's sensor reads...\")\r\n",
+					"\r\n",
+					"last_dfs_sensors_day = get_sensors_data_day(read_date_dt=read_date_dt)\r\n",
+					"\r\n",
+					"# Concatenate old and new data frames along rows\r\n",
+					"list_all_old_data = [pd.concat([old_df_sensor, last_df_sensor], axis=0) for old_df_sensor, last_df_sensor in zip(list_all_old_data, last_dfs_sensors_day)]\r\n",
+					"\r\n",
+					"# Sort the index in descending order\r\n",
+					"list_all_old_data = [df_sensor.sort_index(ascending=False) for df_sensor in list_all_old_data]\r\n",
+					"\r\n",
+					"# Remove duplicates based on index\r\n",
+					"list_all_old_data = [df_sensor.drop_duplicates(subset=df_sensor.index.name, keep='first') for df_sensor in list_all_old_data]\r\n",
+					"\r\n",
+					"\r\n",
+					"# PerformanceWarning: DataFrame is highly fragmented.  \r\n",
+					"# This is usually the result of calling `frame.insert` many times, which has poor performance.  \r\n",
+					"# Consider joining all columns at once using pd.concat(axis=1) instead. \r\n",
+					"# To get a de-fragmented frame, use `newframe = frame.copy()`\r\n",
+					"#   df_sensor_data_day.loc[dt_to, sensor_id] = value"
+				],
+				"execution_count": 35
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"\r\n",
+					"# # If it's the first run and there is no data from previous days:\r\n",
+					"# if list_all_old_data is None:    \r\n",
+					"#     list_all_data = [[] for _ in range(4)]\r\n",
+					"    \r\n",
+					"#     # Requesting the data for all sensors for the last 3 months, which is the max. stored in the public ACA API\r\n",
+					"#     for d in tqdm(range(89, 0, -1)):\r\n",
+					"#         print(d)\r\n",
+					"#         read_date_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=d)\r\n",
+					"#         all_dfs_sensors_day = get_sensors_data_day(read_date_dt=read_date_dt)\r\n",
+					"        \r\n",
+					"#         for i in range(4):\r\n",
+					"#             list_all_data[i].append(all_dfs_sensors_day[i])\r\n",
+					"        \r\n",
+					"#     list_all_old_data = [pd.concat(dfs_sensor_data, axis=0) for dfs_sensor_data in list_all_data]\r\n",
+					"    \r\n",
+					"# else:  \r\n",
+					"#     # Normal daily update\r\n",
+					"#     read_date_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)\r\n",
+					"#     print(\"Old data found, requesting and updating previous day's sensor reads...\")\r\n",
+					"\r\n",
+					"#     last_dfs_sensors_day = get_sensors_data_day(read_date_dt=read_date_dt)\r\n",
+					"\r\n",
+					"#     list_all_old_data = [pd.concat([old_df_sensor, last_df_sensor], axis=0) for old_df_sensor, last_df_sensor in zip(list_all_old_data, last_dfs_sensors_day)]\r\n",
+					"#     list_all_old_data = [df_sensor.sort_index(ascending=False) for df_sensor in list_all_old_data]\r\n",
+					"#     list_all_old_data = [df_sensor.drop_duplicates(subset=df_sensor.index.name, keep='first') for df_sensor in list_all_old_data]\r\n",
+					"\r\n",
+					"# #list_all_old_data = [df_sensor[~df_sensor.index.duplicated(keep=\"first\")] for df_sensor in list_all_old_data]"
+				],
+				"execution_count": 170
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/Version_370/Metadata/"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# # If it's the first run and there is no data from previous days:\r\n",
+					"# if list_all_old_data is None:\r\n",
+					"#     list_all_data = [[] for _ in range(4)]\r\n",
+					"    \r\n",
+					"#     # Requesting the data for all sensors for the last 3 months, which is the max. stored in the public ACA API\r\n",
+					"#     for d in tqdm(range(89, 0, -1)):\r\n",
+					"#         print(d)\r\n",
+					"#         read_date_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=d)\r\n",
+					"#         all_dfs_sensors_day = get_sensors_data_day(read_date_dt=read_date_dt)  # Assume get_sensors_data_day_spark returns Spark DataFrames\r\n",
+					"        \r\n",
+					"#         for i in range(4):\r\n",
+					"#             list_all_data[i].append(all_dfs_sensors_day[i])\r\n",
+					"        \r\n",
+					"#     list_all_old_data = [spark.union(dfs_sensor_data) for dfs_sensor_data in list_all_data]\r\n",
+					"\r\n",
+					"# else:  \r\n",
+					"#     # Normal daily update\r\n",
+					"#     read_date_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)\r\n",
+					"#     print(\"Old data found, requesting and updating previous day's sensor reads...\")\r\n",
+					"\r\n",
+					"#     last_dfs_sensors_day = get_sensors_data_day(read_date_dt=read_date_dt)  # Assume get_sensors_data_day returns Spark DataFrames\r\n",
+					"\r\n",
+					"#     list_all_old_data = [old_df_sensor.join(last_df_sensor, on=old_df_sensor.columns[0], how=\"full\") for old_df_sensor, last_df_sensor in zip(list_all_old_data, last_dfs_sensors_day)]\r\n",
+					"#     list_all_old_data = [df_sensor.orderBy(df_sensor.columns[0], ascending=False) for df_sensor in list_all_old_data]\r\n",
+					"#     list_all_old_data = [df_sensor.dropDuplicates([df_sensor.columns[0]]) for df_sensor in list_all_old_data]\r\n",
+					""
+				],
+				"execution_count": 69
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Data Loading"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"if list_all_old_data is not None:\r\n",
+					"    for category, df_sensor_data in zip(category, list_all_old_data):\r\n",
+					"        # Convert pandas DataFrame to Spark DataFrame\r\n",
+					"        spark_df_sensor_data = spark.createDataFrame(df_sensor_data)\r\n",
+					"        \r\n",
+					"        # Save Spark DataFrame to a CSV file\r\n",
+					"        spark_df_sensor_data.write.csv(f\"{category}_sensors_reads.csv\", mode=\"overwrite\")\r\n",
+					"else:\r\n",
+					"     print(\"list_all_old_data is None. Please initialize it before iterating.\")"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"if list_all_old_data is not None:\r\n",
+					"    for category, df_sensor_data in zip(category, list_all_old_data):\r\n",
+					"        df_sensor_data_pandas.to_csv(f\"{category}_sensors_reads.csv\")\r\n",
+					"else:\r\n",
+					"    print(\"list_all_old_data is None. Please initialize it before iterating.\")\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# if list_all_old_data is not None:\r\n",
+					"#     for category, df_sensor_data in zip(category, list_all_old_data):\r\n",
+					"#         df_sensor_data_pandas = df_sensor_data.toPandas()  # Convert Spark DataFrame to Pandas DataFrame\r\n",
+					"#         df_sensor_data_pandas.to_csv(f\"{category}_sensors_reads.csv\")\r\n",
+					"# else:\r\n",
+					"#     print(\"list_all_old_data is None. Please initialize it before iterating.\")\r\n",
+					""
+				],
+				"execution_count": 82
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Check Statistics"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"if list_all_old_data is not None:\r\n",
+					"    print(\"Rows:\", len(list_all_old_data[0]))\r\n",
+					"    print(\"Total Sensors:\", sum([len(s.columns) for s in list_all_old_data]))\r\n",
+					"    print(\"From:\", list_all_old_data[0].index[0]) \r\n",
+					"    print(\"To:  \", list_all_old_data[0].index[-1])\r\n",
+					"else:\r\n",
+					"    print(\"list_all_old_data is None. Please initialize it before iterating.\")\r\n",
+					""
+				],
+				"execution_count": 84
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# end here\r\n",
+					""
+				]
+			}
+		]
+	}
+}

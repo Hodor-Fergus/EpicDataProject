@@ -1,0 +1,24 @@
+{
+	"name": "ADLS_Versions_SubFolders",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "water-crisis-WorkspaceDefaultStorage",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "DelimitedText",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"folderPath": "BronzeLayer",
+				"fileSystem": "waterstorageaccount"
+			},
+			"columnDelimiter": ",",
+			"escapeChar": "\\",
+			"firstRowAsHeader": false,
+			"quoteChar": "\""
+		},
+		"schema": []
+	},
+	"type": "Microsoft.Synapse/workspaces/datasets"
+}

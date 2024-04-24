@@ -1,0 +1,2374 @@
+{
+	"name": "Temporary_Fix",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "backuppool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "c2d7299f-cd17-43c5-b187-d641557c538b"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/e6a89ab3-ce27-4148-bad8-97a6fee2010c/resourceGroups/FergusAssam/providers/Microsoft.Synapse/workspaces/water-crisis/bigDataPools/backuppool",
+				"name": "backuppool",
+				"type": "Spark",
+				"endpoint": "https://water-crisis.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/backuppool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# <div style=\"color:#fff;display:fill;border-radius:15px;background-color:#328ada;text-align:left;letter-spacing:0.1px;overflow:hidden;padding:5px;color:white;overflow:hidden;margin:0;font-size:80%\">Epic Internship</div>"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## <div style=\"color:#fff;display:fill;border-radius:10px;background-color:#328ada;text-align:left;letter-spacing:0.1px;overflow:hidden;padding:20px;color:white;overflow:hidden;margin:0;font-size:80%\"> 🔧📗ET Code for the \"🏞️Catalonia Water Resource Daily🚰\" Dataset.</div>\r\n",
+					"\r\n",
+					"This Notebook is, **scheduled** to run automatically on a **daily** basis in a pipeline, in order to extract information from the public API of the [ACA - Agència Catalana de l'Aigua](https://aca.gencat.cat/) (Catalan Water Agency). This API contains the **real-time value reads from 4 types of sensors** (Reservoir Level Sensors, Gauging Sensors, Pluviometer Sensors, and Piezometer Sensors) placed around the **Catalan region** in Spain. It also contains Metadata information which is extracted and saved in another supplementary Notebook(copy_metadata_monthly), and later imported here.\r\n",
+					"\r\n",
+					"#### Internship Business Case:\r\n",
+					"\r\n",
+					"Catalonia is currently experiencing a dry period, characterized by reduced precipitation and lower-than-average water levels in reservoirs and rivers as well as in other regions. Struggling with water reserve levels already, the goal of this internship is to come up with actionable insights that will help the government make informed decisions and solutions that will benefit the community and the region at large.\r\n",
+					"\r\n",
+					"##### Note:\r\n",
+					"Data is uploaded from the sensors at different time intervals but the data is collected and average taken for the closet time on all the 4 categories.\r\n",
+					"\r\n",
+					"## <div style=\"color:#fff;display:fill;border-radius:15px;background-color:#328ada;text-align:left;letter-spacing:0.1px;overflow:hidden;padding:5px;color:white;overflow:hidden;margin:0;font-size:80%\"></div>\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Parameters and Libraries"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Create a parameter that will be used to change read folder and mode dynamically in the pipeline"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"tags": [
+						"parameters"
+					]
+				},
+				"source": [
+					"# Get the version of the folder from the Bronze layer and this will be used as a parameter in the pipeline (Toggled as a parameter)\r\n",
+					"#oldFolder = \"Version_01\"\r\n",
+					"FolderName = \"Version_01\"\r\n",
+					"Mode = \"overwrite\" \r\n",
+					"MetaFolder = \"Metadata\"\r\n",
+					"category = ['reservoir','gauge','pluviometer', 'piezometer']\r\n",
+					"meta_end = '_sensors_metadata'\r\n",
+					"meta_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}/{MetaFolder}\"\r\n",
+					"sensors_reads_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}\"\r\n",
+					"sensors_end = '_sensors_reads'\r\n",
+					"ml_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/ML_Folder\"\r\n",
+					"#For the first time it overwrites and for subsequent notebooks, it apppends which is adjusted via the pipeline\r\n",
+					"# Also live data can be extracted from the API."
+				],
+				"execution_count": 83
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Check If Folder Exists"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Check if the file path exists using mssparkutils\r\n",
+					"if not mssparkutils.fs.exists(f\"{sensors_reads_path}\"):\r\n",
+					"    print(f\"Folder {FolderName} Not Found, Creating One Now \")\r\n",
+					"    mssparkutils.fs.mkdirs(f\"{sensors_reads_path}\")\r\n",
+					"else:\r\n",
+					"    print(f\"Folder {FolderName} Found, Proceeding with code\")"
+				],
+				"execution_count": 84
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Generate the dataset Folder incrementally"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# FolderName_SeperatorRemoved = FolderName.replace(\"_\",\"\")\r\n",
+					"# VersionName = FolderName.split('_')[0]\r\n",
+					"# VersionNum = FolderName.split('_')[1]"
+				],
+				"execution_count": 85
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Import Libraries"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#Weather API"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from pyspark.sql import SparkSession\r\n",
+					"from pyspark.sql import functions as F, Row\r\n",
+					"from pyspark.sql.functions import lit,col,regexp_replace,to_date,count,sum,coalesce,to_timestamp, current_date, date_sub #add constant or literal value as a new column to the DataFrame. #regexp_replace to replace a character in a string\r\n",
+					"from pyspark.sql.types import DateType\r\n",
+					"from datetime import datetime, timedelta\r\n",
+					"from tqdm.notebook import tqdm\r\n",
+					"import re\r\n",
+					"#from pathlib import Path\r\n",
+					"import pandas as pd\r\n",
+					"import numpy as np\r\n",
+					"import requests,json,os\r\n",
+					"from notebookutils import mssparkutils\r\n",
+					"spark.sql(\"set spark.sql.legacy.timeParserPolicy=LEGACY\")\r\n",
+					"#If you check the schema table, you will notice the column Timestamp is stored as (M.D.Y.hh.mm). \r\n",
+					"#inorder to handle unforseen exception error. eg October, Oct ,oct, 10, we use the timeParserPolicy=LEGACY to fix this."
+				],
+				"execution_count": 86
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Create Connections"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Spark Session & blob connection\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#Create Spark Session and connection to blob storage. It is created in the Notebook and not in the pipeline. \r\n",
+					"#You can only set Spark configuration properties that start with the spark.sql prefix.\r\n",
+					"# \"\"\"You can have many spark sessions but only 1 spark context (like spark driver). It is better in the notebook because\r\n",
+					"# It already has access to the underlying Spark features for creating RDD and dataframe.\"\"\"\r\n",
+					"\r\n",
+					"blob_account = \"waterstorageaccount\"\r\n",
+					"blob_container = \"BronzeLayer\"\r\n",
+					"\r\n",
+					"sc = SparkSession.builder.getOrCreate()\r\n",
+					"#getConnectionString()\r\n",
+					"token_library = sc._jvm.com.microsoft.azure.synapse.tokenlibrary.TokenLibrary\r\n",
+					"dls_sas_token = token_library.getConnectionString(\"water-crisis-WorkspaceDefaultStorage\")\r\n",
+					"spark.conf.set(\r\n",
+					"    'fs.azure.sas.{}.{}.blob.core.windows.net' .format(blob_container, blob_account),\r\n",
+					"    dls_sas_token)\r\n",
+					"\r\n",
+					"#https://projectwatercrisis.dfs.core.windows.net/waterstorageaccount/BronzeLayer/Version_322/gauge_sensors_reads.csv\r\n",
+					""
+				],
+				"execution_count": 87
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Copy Previous Data To New Folder For Append\r\n",
+					"\r\n",
+					"will be done in pipeline\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# # list sub folders\r\n",
+					"# mssparkutils.fs.ls(f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/\")\r\n",
+					"\r\n",
+					"# # Create New Folder\r\n",
+					"# mssparkutils.fs.mkdirs(f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}\")\r\n",
+					"\r\n",
+					"# # Copy Old data to New Folder\r\n",
+					"# old_data_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{oldFolder}/*\"\r\n",
+					"# new_folder_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}\"\r\n",
+					"# mssparkutils.fs.fastcp(f\"{old_data_path}\", f\"{new_folder_path}\", True) # Set the third parameter as True to copy all files and directories recursively"
+				],
+				"execution_count": 88
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Dynamic Delimiter"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Use Regex to read the header, determine the delimiter from a set of predefined common delimiters \r\n",
+					"# and store it as a variable then use that variable as a delimiter\r\n",
+					"def f_get_delimiter (source_path):\r\n",
+					"    try:\r\n",
+					"        print(\"Source Path:\", source_path)  # Debug: Print the source path\r\n",
+					"        headerlist = spark.sparkContext.textFile(source_path).take(1)\r\n",
+					"        header_str = ''.join(headerlist)\r\n",
+					"\r\n",
+					"        results= re.search(\"(,|;|\\\\|)\",header_str)\r\n",
+					"        return results.group()\r\n",
+					"    except Exception as err:\r\n",
+					"        print(\"Error Occured \", str(err))"
+				],
+				"execution_count": 89
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## METADATA"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### We have data available from 4 different types of sensors:\r\n",
+					"- Reservoir Sensors <br>\r\n",
+					"- Gauging Sensors <br>\r\n",
+					"- Pluviomter Sensors <br>\r\n",
+					"- Piezometer Sensors"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Metadata Links"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# ACA API endpoints\r\n",
+					"# https://aca.gencat.cat/ca/laigua/consulta-de-dades/dades-obertes/dades-obertes-temps-real/index.html#googtrans(ca|en)\r\n",
+					"\r\n",
+					"# Info Catalog URLs [Metadata]\r\n",
+					"URL_RESERVOIRS_CATALOG = \"http://aca-web.gencat.cat/sdim2/apirest/catalog?componentType=embassament\"\r\n",
+					"URL_GAUGE_CATALOG = \"http://aca-web.gencat.cat/sdim2/apirest/catalog?componentType=aforament\"\r\n",
+					"URL_PLUVIOMETER_CATALOG = \"http://aca-web.gencat.cat/sdim2/apirest/catalog?componentType=pluviometre\"\r\n",
+					"URL_PIEZOMETER_CATALOG = \"http://aca-web.gencat.cat/sdim2/apirest/catalog?componentType=piezometre\""
+				],
+				"execution_count": 90
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Load Meta API Files"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"def get_metadata(metaurl):\r\n",
+					"    # Make a GET request to the URL\r\n",
+					"    meta_response = requests.get(metaurl)\r\n",
+					"\r\n",
+					"    # Check if the request was successful (status code 200)\r\n",
+					"    if meta_response.status_code == 200:\r\n",
+					"        # Parse the JSON response\r\n",
+					"        json_metadata = meta_response.json()\r\n",
+					"        return json_metadata\r\n",
+					"    \r\n",
+					"    else:\r\n",
+					"        print(f\"Request failed with status code {meta_response.status_code}\")  \r\n",
+					"        return None\r\n",
+					"    \r\n",
+					"\r\n",
+					"# Check if the file path exists using mssparkutils\r\n",
+					"if not mssparkutils.fs.exists(f\"{meta_path}\"):\r\n",
+					"    print(\"No Meta Folder Found, Creating now \")\r\n",
+					"    mssparkutils.fs.mkdirs(f\"{meta_path}\")"
+				],
+				"execution_count": 91
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### 2.1. Reservoir Sensors Metadata¶\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"json_reservoir_sensors_metadata = get_metadata(URL_RESERVOIRS_CATALOG)\r\n",
+					"print(len(json_reservoir_sensors_metadata[\"providers\"]))\r\n",
+					"print(json_reservoir_sensors_metadata[\"providers\"][0].keys())\r\n",
+					"\r\n",
+					"\r\n",
+					"# Exploring 3rd-4th levels (sensors)\r\n",
+					"print(\"Provider:\", json_reservoir_sensors_metadata[\"providers\"][0][\"provider\"])\r\n",
+					"print(\"Permission:\", json_reservoir_sensors_metadata[\"providers\"][0][\"permission\"])\r\n",
+					"print(\"Num  sensors:\", len(json_reservoir_sensors_metadata[\"providers\"][0][\"sensors\"]))\r\n",
+					"print(\"\\n\\tSensor keys:\", json_reservoir_sensors_metadata[\"providers\"][0][\"sensors\"][0].keys())"
+				],
+				"execution_count": 92
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"print(json_reservoir_sensors_metadata[\"providers\"][0][\"sensors\"][3][\"componentAdditionalInfo\"])\r\n",
+					"#3 = row"
+				],
+				"execution_count": 93
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Exploring a sample sensor\"s info\r\n",
+					"\r\n",
+					"for k in json_reservoir_sensors_metadata[\"providers\"][0][\"sensors\"][0].keys():\r\n",
+					"    print(f\"\\n{k}  -->  {json_reservoir_sensors_metadata['providers'][0]['sensors'][0][k]}\")"
+				],
+				"execution_count": 94
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Building the dataframe to store all sensors data\r\n",
+					"\r\n",
+					"translate = {\r\n",
+					"    \"Nivell absolut\": \"Absolute level\",\r\n",
+					"    \"Volum embassat\": \"Reservoir volume\",\r\n",
+					"    \"Percentatge volum embassat\": \"Percentage reservoir volume\",\r\n",
+					"    \"En servei\": \"In service\",\r\n",
+					"    \"En manteniment\": \"In maintenance\",\r\n",
+					"    \"Fora de servei\": \"Out of service\",\r\n",
+					"    \"Funcionalitat limitada\": \"Limited functionality\",\r\n",
+					"}\r\n",
+					"\r\n",
+					"sensors_metadata = []\r\n",
+					"\r\n",
+					"for i, s in enumerate(json_reservoir_sensors_metadata[\"providers\"][0][\"sensors\"]):\r\n",
+					"    sensor_metadata = {\r\n",
+					"        \"sensor_id\": s[\"sensor\"],\r\n",
+					"        \"description\": translate[s[\"description\"]] if s[\"description\"] in translate else s[\"description\"],\r\n",
+					"        \"dataType\": s[\"dataType\"],\r\n",
+					"        \"location\": s[\"location\"],\r\n",
+					"        \"type\": s[\"type\"],\r\n",
+					"        \"unit\": \"masl\" if s[\"unit\"] == \"msnm\" else s[\"unit\"],\r\n",
+					"        \"timeZone\": s[\"timeZone\"],\r\n",
+					"        \"publicAccess\": s[\"publicAccess\"],\r\n",
+					"        \"component\": s[\"component\"],\r\n",
+					"        \"componentType\": \"reservoir\" if s[\"componentType\"] == \"embassament\" else s[\"componentType\"],\r\n",
+					"        \"componentDesc\": s[\"componentDesc\"],\r\n",
+					"        \"componentPublicAccess\": s[\"componentPublicAccess\"],\r\n",
+					"        \"info_sample_rate_(min)\": s[\"additionalInfo\"][\"Temps mostreig (min)\"] if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_min_val\": int(s[\"additionalInfo\"][\"Rang mínim\"].replace(\",\", \".\")) if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_max_val\": int(s[\"additionalInfo\"][\"Rang màxim\"].replace(\",\", \".\")) if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_region\": s[\"componentAdditionalInfo\"][\"Comarca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_province\": s[\"componentAdditionalInfo\"][\"Província\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_river\": s[\"componentAdditionalInfo\"][\"Riu\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_river_district\": s[\"componentAdditionalInfo\"][\"Districte fluvial\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_basin\": s[\"componentAdditionalInfo\"][\"Conca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_sub_basin\": s[\"componentAdditionalInfo\"][\"Subconca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_municipality\": s[\"componentAdditionalInfo\"][\"Terme municipal\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_reservoir_max_capacity_(hm3)\": float(s[\"componentAdditionalInfo\"][\"Capacitat màxima embassament\"].split(\" \")[0].replace(\",\", \".\")) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_x_coord_utm_etrs89\": int(s[\"componentAdditionalInfo\"][\"Coordenada X (UTM ETRS89)\"]) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_y_coord_utm_etrs89\": int(s[\"componentAdditionalInfo\"][\"Coordenada Y (UTM ETRS89)\"]) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_drained_basin_surface(km2)\": float(s[\"componentAdditionalInfo\"][\"Superfície conca drenada\"].split(\" \")[0].replace(\",\", \".\")) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_responsible_entity\": s[\"componentAdditionalInfo\"][\"Titular\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_state\": (translate[s[\"componentAdditionalInfo\"][\"Estat\"]] if s[\"componentAdditionalInfo\"][\"Estat\"] in translate else s[\"componentAdditionalInfo\"][\"Estat\"]) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"    }\r\n",
+					"    sensors_metadata.append(sensor_metadata)\r\n",
+					""
+				],
+				"execution_count": 95
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"import pandas as pd"
+				],
+				"execution_count": 96
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Reservoir DF"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"\r\n",
+					"reservoir_sensors_metadata = pd.DataFrame(sensors_metadata)\r\n",
+					"reservoir_sensors_metadata.to_csv(f\"{meta_path}/reservoir{meta_end}.csv\", index=False)\r\n",
+					"\r\n",
+					"print(reservoir_sensors_metadata.shape)\r\n",
+					"display(reservoir_sensors_metadata.info())\r\n",
+					"reservoir_sensors_metadata.head()"
+				],
+				"execution_count": 97
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#print sample\r\n",
+					"reservoir_sensors_metadata.iloc[1]\r\n",
+					""
+				],
+				"execution_count": 98
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### 2.2. Gauge Sensors Metadata¶\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Getting Gauge Sensors Metadata from the API\r\n",
+					"json_gauge_sensors_metadata = get_metadata(URL_GAUGE_CATALOG)\r\n",
+					"\r\n",
+					"# Exploring 1st-2nd levels of the json hierarchy\r\n",
+					"print(len(json_gauge_sensors_metadata[\"providers\"]))\r\n",
+					"print(json_gauge_sensors_metadata[\"providers\"][0].keys())\r\n",
+					"\r\n",
+					"# Exploring 3rd-4th levels (sensors)\r\n",
+					"print(\"Provider:\", json_gauge_sensors_metadata[\"providers\"][0][\"provider\"])\r\n",
+					"print(\"Permission:\", json_gauge_sensors_metadata[\"providers\"][0][\"permission\"])\r\n",
+					"print(\"Num  sensors:\", len(json_gauge_sensors_metadata[\"providers\"][0][\"sensors\"]))\r\n",
+					"print(\"\\n\\tSensor keys:\", list(json_gauge_sensors_metadata[\"providers\"][0][\"sensors\"][0].keys()))"
+				],
+				"execution_count": 99
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Exploring a sample sensor\"s info\r\n",
+					"\r\n",
+					"for k in json_gauge_sensors_metadata[\"providers\"][0][\"sensors\"][0].keys():\r\n",
+					"    print(f\"\\n{k}  -->  {json_gauge_sensors_metadata['providers'][0]['sensors'][0][k]}\")"
+				],
+				"execution_count": 100
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Exploring a sample sensor\"s info\r\n",
+					"\r\n",
+					"print(json_gauge_sensors_metadata[\"providers\"][0][\"sensors\"][15][\"componentAdditionalInfo\"])"
+				],
+				"execution_count": 101
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Building the dataframe to store all sensors data\r\n",
+					"\r\n",
+					"additional_fields_map = {\r\n",
+					"    \"Codi ordre\": \"info_order_id\",\r\n",
+					"    \"Comarca\": \"info_region\",\r\n",
+					"    \"Conca\": \"info_basin\",\r\n",
+					"    \"Coordenada X (UTM ETRS89)\": \"info_x_coord_utm_etrs89\",\r\n",
+					"    \"Coordenada Y (UTM ETRS89)\": \"info_y_coord_utm_etrs89\",\r\n",
+					"    \"Districte fluvial\": \"info_river_district\",\r\n",
+					"    \"Estat\": \"info_state\",\r\n",
+					"    \"Província\": \"info_province\",\r\n",
+					"    \"Riu\": \"info_river\",\r\n",
+					"    \"Subconca\": \"info_sub_basin\",\r\n",
+					"    \"Superfície conca drenada\": \"info_drained_basin_surface(km2)\",\r\n",
+					"    \"Terme municipal\": \"info_municipality\",\r\n",
+					"    \"Tipologia\": \"info_tipology\",\r\n",
+					"    \"Titular\": \"info_responsible_entity\",\r\n",
+					"}\r\n",
+					"\r\n",
+					"translate = {\r\n",
+					"    \"Cabal riu\": \"River discharge\",\r\n",
+					"    \"Nivell riu\": \"River level\",\r\n",
+					"    \"Cabal canal\": \"Canal discharge\",\r\n",
+					"    \"Cabal total\": \"Total discharge\",\r\n",
+					"    \"En servei\": \"In service\",\r\n",
+					"    \"En manteniment\": \"In maintenance\",\r\n",
+					"    \"Fora de servei\": \"Out of service\",\r\n",
+					"    \"Funcionalitat limitada\": \"Limited functionality\",\r\n",
+					"}\r\n",
+					"\r\n",
+					"sensors_metadata = []\r\n",
+					"\r\n",
+					"for i, s in enumerate(json_gauge_sensors_metadata[\"providers\"][0][\"sensors\"]):\r\n",
+					"    sensor_metadata = {\r\n",
+					"        \"sensor_id\": s[\"sensor\"],\r\n",
+					"        \"description\": translate[s[\"description\"]] if s[\"description\"] in translate else s[\"description\"],\r\n",
+					"        \"dataType\": s[\"dataType\"],\r\n",
+					"        \"location\": s[\"location\"],\r\n",
+					"        \"type\": s[\"type\"],\r\n",
+					"        \"unit\": s[\"unit\"],\r\n",
+					"        \"timeZone\": s[\"timeZone\"],\r\n",
+					"        \"publicAccess\": s[\"publicAccess\"],\r\n",
+					"        \"component\": s[\"component\"],\r\n",
+					"        \"componentType\": \"Capacity\" if s[\"componentType\"] == \"aforament\" else s[\"componentType\"],\r\n",
+					"        \"componentDesc\": s[\"componentDesc\"],\r\n",
+					"        \"componentPublicAccess\": s[\"componentPublicAccess\"],\r\n",
+					"        \"info_sample_rate_(min)\": s[\"additionalInfo\"][\"Temps mostreig (min)\"] if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_min_val\": int(s[\"additionalInfo\"][\"Rang mínim\"].replace(\",\", \".\")) if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_max_val\": int(s[\"additionalInfo\"][\"Rang màxim\"].replace(\",\", \".\")) if \"additionalInfo\" in s else np.nan,\r\n",
+					"    }\r\n",
+					"    \r\n",
+					"    if \"componentAdditionalInfo\" in s:\r\n",
+					"        for field_k, field_v in additional_fields_map.items():\r\n",
+					"            if field_k in s[\"componentAdditionalInfo\"]:\r\n",
+					"                \r\n",
+					"                if field_v in [\"info_x_coord_utm_etrs89\", \"info_y_coord_utm_etrs89\"]:\r\n",
+					"                    sensor_metadata[field_v] = int(s[\"componentAdditionalInfo\"][field_k])\r\n",
+					"                    \r\n",
+					"                elif field_v == \"info_drained_basin_surface(km2)\":\r\n",
+					"                    sensor_metadata[field_v] = float(s[\"componentAdditionalInfo\"][field_k].split(\" \")[0].replace(\",\", \".\")) if s[\"componentAdditionalInfo\"][field_k] else np.nan\r\n",
+					"                    \r\n",
+					"                elif field_v == \"info_state\":\r\n",
+					"                    sensor_metadata[field_v] = (translate[s[\"componentAdditionalInfo\"][\"Estat\"]] if s[\"componentAdditionalInfo\"][\"Estat\"] in translate else s[\"componentAdditionalInfo\"][\"Estat\"]) if \"componentAdditionalInfo\" in s else np.nan\r\n",
+					"                \r\n",
+					"                else:\r\n",
+					"                    sensor_metadata[field_v] = s[\"componentAdditionalInfo\"][field_k]\r\n",
+					"                    \r\n",
+					"            else: \r\n",
+					"                sensor_metadata[field_v] = np.nan\r\n",
+					"                \r\n",
+					"    sensors_metadata.append(sensor_metadata)\r\n",
+					""
+				],
+				"execution_count": 102
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Gauge DF"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"gauge_sensors_metadata = pd.DataFrame(sensors_metadata)\r\n",
+					"gauge_sensors_metadata.to_csv(f\"{meta_path}/gauge{meta_end}.csv\", index=False)\r\n",
+					"\r\n",
+					"gauge_sensors_metadata.head()"
+				],
+				"execution_count": 103
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Comparing different sample types\r\n",
+					"# There are two types of river sensors: gauge (l/s) and level (cm)\r\n",
+					"\r\n",
+					"print(gauge_sensors_metadata.iloc[0]), \r\n",
+					"print(\"-\" * 60), \r\n",
+					"print(gauge_sensors_metadata.iloc[1])\r\n",
+					"print(\"-\" * 60), \r\n",
+					"print(gauge_sensors_metadata.iloc[15])"
+				],
+				"execution_count": 104
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"gauge_sensors_metadata[\"componentType\"].value_counts()"
+				],
+				"execution_count": 105
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### 2.3. Pluviometer Sensors Metadata¶\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Getting Gauge Sensors Metadata from the API\r\n",
+					"json_pluviometer_sensors_metadata = get_metadata(URL_PLUVIOMETER_CATALOG)\r\n",
+					"\r\n",
+					"# Exploring 1st-2nd levels of the json hierarchy\r\n",
+					"print(len(json_pluviometer_sensors_metadata[\"providers\"]))\r\n",
+					"print(json_pluviometer_sensors_metadata[\"providers\"][0].keys())\r\n",
+					"\r\n",
+					"# Exploring 3rd-4th levels (sensors)\r\n",
+					"print(\"Provider:\", json_pluviometer_sensors_metadata[\"providers\"][0][\"provider\"])\r\n",
+					"print(\"Permission:\", json_pluviometer_sensors_metadata[\"providers\"][0][\"permission\"])\r\n",
+					"print(\"Num  sensors:\", len(json_pluviometer_sensors_metadata[\"providers\"][0][\"sensors\"]))\r\n",
+					"print(\"\\n\\tSensor keys:\", list(json_pluviometer_sensors_metadata[\"providers\"][0][\"sensors\"][0].keys()))"
+				],
+				"execution_count": 106
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Exploring a sample sensor\"s info\r\n",
+					"\r\n",
+					"for k in json_pluviometer_sensors_metadata[\"providers\"][0][\"sensors\"][0].keys():\r\n",
+					"    print(f\"\\n{k}  -->  {json_pluviometer_sensors_metadata['providers'][0]['sensors'][0][k]}\")"
+				],
+				"execution_count": 107
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Exploring a sample sensor\"s info\r\n",
+					"\r\n",
+					"print(*[k + \"\\n\" for k in json_pluviometer_sensors_metadata[\"providers\"][0][\"sensors\"][1][\"componentAdditionalInfo\"]])"
+				],
+				"execution_count": 108
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"info_fields = []\r\n",
+					"\r\n",
+					"for s in json_pluviometer_sensors_metadata[\"providers\"][0][\"sensors\"]:\r\n",
+					"#     print(s[\"description\"])\r\n",
+					"#     continue\r\n",
+					"    info_fields.extend(s[\"componentAdditionalInfo\"])\r\n",
+					"    print(len(s[\"componentAdditionalInfo\"]), end=\", \")\r\n",
+					"\r\n",
+					"print(\"\\n\\nunique:\", len(set(info_fields)))\r\n",
+					"set(info_fields)"
+				],
+				"execution_count": 109
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Building the dataframe to store all sensors data\r\n",
+					"\r\n",
+					"translate = {\r\n",
+					"    \"Nivell piezomètric absolut\": \"Absolute piezometric level\",\r\n",
+					"    \"Temperatura de l'aigua\": \"Water temperature\",\r\n",
+					"    \"Conductivita\": \"Conductivity\",\r\n",
+					"    \"En servei\": \"In service\",\r\n",
+					"    \"En manteniment\": \"In maintenance\",\r\n",
+					"    \"Fora de servei\": \"Out of service\",\r\n",
+					"    \"Funcionalitat limitada\": \"Limited functionality\",\r\n",
+					"}\r\n",
+					"\r\n",
+					"sensors_metadata = []\r\n",
+					"\r\n",
+					"for i, s in enumerate(json_pluviometer_sensors_metadata[\"providers\"][0][\"sensors\"]):\r\n",
+					"    sensor_metadata = {\r\n",
+					"        \"sensor_id\": s[\"sensor\"],\r\n",
+					"        \"description\": \"Rainfall intensity\" if s[\"description\"] == \"Intensitat de precipitació\" else s[\"description\"],\r\n",
+					"        \"dataType\": s[\"dataType\"],\r\n",
+					"        \"location\": s[\"location\"],\r\n",
+					"        \"type\": s[\"type\"],\r\n",
+					"        \"unit\": s[\"unit\"],\r\n",
+					"        \"timeZone\": s[\"timeZone\"],\r\n",
+					"        \"publicAccess\": s[\"publicAccess\"],\r\n",
+					"        \"component\": s[\"component\"],\r\n",
+					"        \"componentType\": \"reservoir\" if s[\"componentType\"] == \"embassament\" else s[\"componentType\"],\r\n",
+					"        \"componentDesc\": s[\"componentDesc\"],\r\n",
+					"        \"componentPublicAccess\": s[\"componentPublicAccess\"],\r\n",
+					"        \"info_sample_rate_(min)\": s[\"additionalInfo\"][\"Temps mostreig (min)\"] if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_min_val\": int(s[\"additionalInfo\"][\"Rang mínim\"].replace(\",\", \".\")) if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_max_val\": int(s[\"additionalInfo\"][\"Rang màxim\"].replace(\",\", \".\")) if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_region\": s[\"componentAdditionalInfo\"][\"Comarca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_province\": s[\"componentAdditionalInfo\"][\"Província\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_river\": s[\"componentAdditionalInfo\"][\"Riu\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_river_district\": s[\"componentAdditionalInfo\"][\"Districte fluvial\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_basin\": s[\"componentAdditionalInfo\"][\"Conca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_sub_basin\": s[\"componentAdditionalInfo\"][\"Subconca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_municipality\": s[\"componentAdditionalInfo\"][\"Terme municipal\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_x_coord_utm_etrs89\": int(s[\"componentAdditionalInfo\"][\"Coordenada X (UTM ETRS89)\"]) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_y_coord_utm_etrs89\": int(s[\"componentAdditionalInfo\"][\"Coordenada Y (UTM ETRS89)\"]) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_state\": (translate[s[\"componentAdditionalInfo\"][\"Estat\"]] if s[\"componentAdditionalInfo\"][\"Estat\"] in translate else s[\"componentAdditionalInfo\"][\"Estat\"]) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"    }\r\n",
+					"    \r\n",
+					"    sensors_metadata.append(sensor_metadata)"
+				],
+				"execution_count": 110
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Pluviometer DF"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"pluviometer_sensors_metadata = pd.DataFrame(sensors_metadata)\r\n",
+					"pluviometer_sensors_metadata.to_csv(f\"{meta_path}/pluviometer{meta_end}.csv\", index=False)\r\n",
+					"\r\n",
+					"pluviometer_sensors_metadata.head()"
+				],
+				"execution_count": 111
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"pluviometer_sensors_metadata.iloc[0]\r\n",
+					""
+				],
+				"execution_count": 112
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### 2.4. Piezometer Sensors Metadata¶\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Getting Piezometer Sensors Metadata from the API\r\n",
+					"json_piezometer_sensors_metadata = get_metadata(URL_PIEZOMETER_CATALOG)\r\n",
+					"\r\n",
+					"# Exploring 1st-2nd levels of the json hierarchy\r\n",
+					"print(len(json_piezometer_sensors_metadata[\"providers\"]))\r\n",
+					"print(json_piezometer_sensors_metadata[\"providers\"][0].keys())\r\n",
+					"\r\n",
+					"\r\n",
+					"# Exploring 3rd-4th levels (sensors)\r\n",
+					"print(\"Provider:\", json_piezometer_sensors_metadata[\"providers\"][0][\"provider\"])\r\n",
+					"print(\"Permission:\", json_piezometer_sensors_metadata[\"providers\"][0][\"permission\"])\r\n",
+					"print(\"Num  sensors:\", len(json_piezometer_sensors_metadata[\"providers\"][0][\"sensors\"]))\r\n",
+					"print(\"\\n\\tSensor keys:\", list(json_piezometer_sensors_metadata[\"providers\"][0][\"sensors\"][0].keys()))"
+				],
+				"execution_count": 113
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Exploring a sample sensor\"s info\r\n",
+					"\r\n",
+					"for k in json_piezometer_sensors_metadata[\"providers\"][0][\"sensors\"][0].keys():\r\n",
+					"    print(f\"\\n{k}  -->  {json_piezometer_sensors_metadata['providers'][0]['sensors'][0][k]}\")"
+				],
+				"execution_count": 114
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Exploring a sample sensor\"s info\r\n",
+					"\r\n",
+					"print(*[k + \"\\n\" for k in json_piezometer_sensors_metadata[\"providers\"][0][\"sensors\"][1][\"componentAdditionalInfo\"]])"
+				],
+				"execution_count": 115
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"info_fields = []\r\n",
+					"\r\n",
+					"for i, s in enumerate(json_piezometer_sensors_metadata[\"providers\"][0][\"sensors\"]):\r\n",
+					"#     print(s[\"description\"])\r\n",
+					"#     continue\r\n",
+					"    info_fields.extend(s[\"componentAdditionalInfo\"]) if \"componentAdditionalInfo\" in s else print(\"no componentAdditionalInfo in\", i)\r\n",
+					"    print(len(s[\"componentAdditionalInfo\"]) if \"componentAdditionalInfo\" in s else \"\", end=\", \")\r\n",
+					"\r\n",
+					"print(\"\\n\\nunique:\", len(set(info_fields)))\r\n",
+					"set(info_fields)"
+				],
+				"execution_count": 116
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Building the dataframe to store all sensors data\r\n",
+					"\r\n",
+					"translate = {\r\n",
+					"    \"Nivell piezomètric absolut\": \"Absolute piezometric level\",\r\n",
+					"    \"Temperatura de l'aigua\": \"Water temperature\",\r\n",
+					"    \"Conductivitat\": \"Conductivity\",\r\n",
+					"    \"En servei\": \"In service\",\r\n",
+					"    \"En manteniment\": \"In maintenance\",\r\n",
+					"    \"Fora de servei\": \"Out of service\",\r\n",
+					"    \"Funcionalitat limitada\": \"Limited functionality\",\r\n",
+					"    \"msnm\": \"masl\",\r\n",
+					"    r\"\\xbaC\": \"°C\",\r\n",
+					"    r\"\\xb5S/cm\": \"µS/cm\",  # microsiemens/cm\r\n",
+					"}\r\n",
+					"\r\n",
+					"sensors_metadata = []\r\n",
+					"\r\n",
+					"for i, s in enumerate(json_piezometer_sensors_metadata[\"providers\"][0][\"sensors\"]):\r\n",
+					"    sensor_metadata = {\r\n",
+					"        \"sensor_id\": s[\"sensor\"],\r\n",
+					"        \"description\": translate[s[\"description\"]] if s[\"description\"] in translate else s[\"description\"],\r\n",
+					"        \"dataType\": s[\"dataType\"],\r\n",
+					"        \"location\": s[\"location\"],\r\n",
+					"        \"type\": s[\"type\"],\r\n",
+					"        \"unit\": translate[s[\"unit\"]] if s[\"unit\"] in translate else s[\"unit\"],\r\n",
+					"        \"timeZone\": s[\"timeZone\"],\r\n",
+					"        \"publicAccess\": s[\"publicAccess\"],\r\n",
+					"        \"component\": s[\"component\"],\r\n",
+					"        \"componentType\": \"reservoir\" if s[\"componentType\"] == \"embassament\" else s[\"componentType\"],\r\n",
+					"        \"componentDesc\": s[\"componentDesc\"],\r\n",
+					"        \"componentPublicAccess\": s[\"componentPublicAccess\"],\r\n",
+					"        \"info_sample_rate_(min)\": s[\"additionalInfo\"][\"Temps mostreig (min)\"] if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_min_val\": int(s[\"additionalInfo\"][\"Rang mínim\"].replace(\",\", \".\")) if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_max_val\": int(s[\"additionalInfo\"][\"Rang màxim\"].replace(\",\", \".\")) if \"additionalInfo\" in s else np.nan,\r\n",
+					"        \"info_region\": s[\"componentAdditionalInfo\"][\"Comarca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_province\": s[\"componentAdditionalInfo\"][\"Província\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_aquifer\": s[\"componentAdditionalInfo\"][\"Aqüífer\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_water_mass\": s[\"componentAdditionalInfo\"][\"Massa d'aigua\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_river_district\": s[\"componentAdditionalInfo\"][\"Districte fluvial\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_basin\": s[\"componentAdditionalInfo\"][\"Conca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_sub_basin\": s[\"componentAdditionalInfo\"][\"Subconca\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_municipality\": s[\"componentAdditionalInfo\"][\"Terme municipal\"] if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_x_coord_utm_etrs89\": int(s[\"componentAdditionalInfo\"][\"Coordenada X (UTM ETRS89)\"]) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_y_coord_utm_etrs89\": int(s[\"componentAdditionalInfo\"][\"Coordenada Y (UTM ETRS89)\"]) if \"componentAdditionalInfo\" in s else np.nan,\r\n",
+					"        \"info_state\": (translate[s[\"componentAdditionalInfo\"][\"Estat\"]] if s[\"componentAdditionalInfo\"][\"Estat\"] in translate else s[\"componentAdditionalInfo\"][\"Estat\"]) if \"componentAdditionalInfo\" in s else np.nan,    \r\n",
+					"    }\r\n",
+					"    \r\n",
+					"    sensors_metadata.append(sensor_metadata)\r\n",
+					""
+				],
+				"execution_count": 117
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Piezometer DF"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"\r\n",
+					"piezometer_sensors_metadata = pd.DataFrame(sensors_metadata)\r\n",
+					"piezometer_sensors_metadata.to_csv(f\"{meta_path}/piezometer{meta_end}.csv\", index=False)\r\n",
+					"piezometer_sensors_metadata.head()\r\n",
+					""
+				],
+				"execution_count": 118
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"piezometer_sensors_metadata.iloc[4]\r\n",
+					""
+				],
+				"execution_count": 119
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### 2.5. Sensor States¶\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"list_sensors_metadata = [\r\n",
+					"    reservoir_sensors_metadata,\r\n",
+					"    gauge_sensors_metadata,\r\n",
+					"    pluviometer_sensors_metadata,\r\n",
+					"    piezometer_sensors_metadata,\r\n",
+					"]\r\n",
+					"\r\n",
+					"for df_sensor in list_sensors_metadata:\r\n",
+					"    print(\"-\"*40)\r\n",
+					"    print(df_sensor.componentType[0])\r\n",
+					"    print(\"-\"*40)\r\n",
+					"    print(df_sensor.info_state.value_counts(), \"\\n\")"
+				],
+				"execution_count": 120
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Assuming dfs_ dictionary is already populated as before\r\n",
+					"types = ['Gauge','Reservoir','Pluviometer', 'Piezometer']\r\n",
+					"for subtype in types:\r\n",
+					"    # Dynamically create variable names and assign the corresponding DataFrame from dfs_\r\n",
+					"    print (f'{subtype} metadata database created.')\r\n",
+					"\r\n",
+					"print(\"All databases successfully created\")"
+				],
+				"execution_count": 121
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Extract Sensor ids\r\n",
+					"Sensor ids will be extracted from the metadata and used to create the sensor readings dataframe"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Reservoir"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"reservoir_sensors_ids = reservoir_sensors_metadata[\"sensor_id\"]\r\n",
+					"\r\n",
+					"print(\"\\nDescriptions:\")\r\n",
+					"display(reservoir_sensors_metadata[\"description\"].value_counts())\r\n",
+					"print(\"\\nUnits:\")\r\n",
+					"display(reservoir_sensors_metadata[\"unit\"].value_counts())\r\n",
+					"print(\"\\nReservoir DF:\")\r\n",
+					"# Using the native show() method in PySpark to display the DataFrame\r\n",
+					"# print(reservoir_sensors_metadata.head(5))\r\n",
+					""
+				],
+				"execution_count": 122
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# # Get sensor IDs from the DataFrame\r\n",
+					"# reservoir_sensors_ids = reservoir_sensors_metadata.select(\"sensor_id\").toPandas()['sensor_id'].tolist()\r\n",
+					"# #print(\"\\nSensor IDs:\")\r\n",
+					"# #reservoir_sensors_ids.show()\r\n",
+					"\r\n",
+					"# # Group by description and count occurrences\r\n",
+					"# description_counts = reservoir_sensors_metadata.groupBy(\"description\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"# print(\"\\nDescriptions:\")\r\n",
+					"# description_counts.show()\r\n",
+					"\r\n",
+					"# # # Group by unit and count occurrences\r\n",
+					"# # unit_counts = reservoir_sensors_metadata.groupBy(\"unit\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"# # print(\"\\nUnits:\")\r\n",
+					"# # unit_counts.show()"
+				],
+				"execution_count": 123
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Piezometer"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"piezometer_sensors_ids = piezometer_sensors_metadata[\"sensor_id\"]\r\n",
+					"\r\n",
+					"print(\"\\nDescriptions:\")\r\n",
+					"display(piezometer_sensors_metadata[\"description\"].value_counts())\r\n",
+					"print(\"\\nUnits:\")\r\n",
+					"display(piezometer_sensors_metadata[\"unit\"].value_counts())"
+				],
+				"execution_count": 124
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# # Get sensor IDs from the DataFrame\r\n",
+					"# piezometer_sensors_ids = piezometer_sensors_metadata.select(\"sensor_id\").toPandas()['sensor_id'].tolist()\r\n",
+					"# #print(\"\\nSensor IDs:\")\r\n",
+					"# #piezometer_sensors_ids.show()\r\n",
+					"\r\n",
+					"# # Group by description and count occurrences\r\n",
+					"# description_counts = piezometer_sensors_metadata.groupBy(\"description\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"# print(\"\\nDescriptions:\")\r\n",
+					"# description_counts.show()\r\n",
+					"\r\n",
+					"# # # Group by unit and count occurrences\r\n",
+					"# # unit_counts = piezometer_sensors_metadata.groupBy(\"unit\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"# # print(\"\\nUnits:\")\r\n",
+					"# # unit_counts.show()"
+				],
+				"execution_count": 125
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Pluviometer"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# # Get sensor IDs from the DataFrame\r\n",
+					"# pluviometer_sensors_ids = pluviometer_sensors_metadata.select(\"sensor_id\").toPandas()['sensor_id'].tolist()\r\n",
+					"# #print(\"\\nSensor IDs:\")\r\n",
+					"# #pluviometer_sensors_ids.show()\r\n",
+					"\r\n",
+					"# # Group by description and count occurrences\r\n",
+					"# description_counts = pluviometer_sensors_metadata.groupBy(\"description\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"# print(\"\\nDescriptions:\")\r\n",
+					"# description_counts.show()\r\n",
+					"\r\n",
+					"# # # Group by unit and count occurrences\r\n",
+					"# # unit_counts = pluviometer_sensors_metadata.groupBy(\"unit\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"# # print(\"\\nUnits:\")\r\n",
+					"# # unit_counts.show()"
+				],
+				"execution_count": 126
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"pluviometer_sensors_ids = pluviometer_sensors_metadata[\"sensor_id\"]\r\n",
+					"\r\n",
+					"print(\"\\nDescriptions:\")\r\n",
+					"display(pluviometer_sensors_metadata[\"description\"].value_counts())\r\n",
+					"print(\"\\nUnits:\")\r\n",
+					"display(pluviometer_sensors_metadata[\"unit\"].value_counts())"
+				],
+				"execution_count": 127
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Gauge"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"gauge_sensors_ids = gauge_sensors_metadata[\"sensor_id\"]\r\n",
+					"\r\n",
+					"print(\"\\nDescriptions:\")\r\n",
+					"display(gauge_sensors_metadata[\"description\"].value_counts())\r\n",
+					"print(\"\\nUnits:\")\r\n",
+					"display(gauge_sensors_metadata[\"unit\"].value_counts())"
+				],
+				"execution_count": 128
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# # Get sensor IDs from the DataFrame\r\n",
+					"# gauge_sensors_ids = gauge_sensors_metadata.select(\"sensor_id\").toPandas()['sensor_id'].tolist()\r\n",
+					"# #print(\"\\nSensor IDs:\")\r\n",
+					"# #gauge_sensors_ids.show()\r\n",
+					"\r\n",
+					"# # Group by description and count occurrences\r\n",
+					"# description_counts = gauge_sensors_metadata.groupBy(\"description\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"# print(\"\\nDescriptions:\")\r\n",
+					"# description_counts.show()\r\n",
+					"\r\n",
+					"# # Group by unit and count occurrences\r\n",
+					"# unit_counts = gauge_sensors_metadata.groupBy(\"unit\").agg(count(\"*\").alias(\"count\"))\r\n",
+					"# print(\"\\nUnits:\")\r\n",
+					"# unit_counts.show()"
+				],
+				"execution_count": 129
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# print(reservoir_sensors_ids)"
+				],
+				"execution_count": 130
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# The sensors ids will be the names of the columns of the DataFrames where the read values will be stored\r\n",
+					"groups_cols_ids = [reservoir_sensors_ids, gauge_sensors_ids, pluviometer_sensors_ids, piezometer_sensors_ids]\r\n",
+					"# print(groups_cols_ids)"
+				],
+				"execution_count": 131
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## SENSOR READS"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### Data Extraction And Transformation"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### API Links and Extraction"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"groups_cols_ids = [reservoir_sensors_ids, gauge_sensors_ids, pluviometer_sensors_ids, piezometer_sensors_ids]\r\n",
+					"\r\n",
+					"\r\n",
+					"# Sensors Data Endpoints\r\n",
+					"URL_RESERVOIR_DATA = 'http://aca-web.gencat.cat/sdim2/apirest/data/EMBASSAMENT-EST'\r\n",
+					"URL_GAUGE_DATA = 'http://aca-web.gencat.cat/sdim2/apirest/data/AFORAMENT-EST'\r\n",
+					"URL_PLUVIOMETER_DATA = 'http://aca-web.gencat.cat/sdim2/apirest/data/PLUVIOMETREACA-EST'\r\n",
+					"URL_PIEZOMETER_DATA = 'http://aca-web.gencat.cat/sdim2/apirest/data/PIEZOMETRE-EST'\r\n",
+					"\r\n",
+					"urls_data = [URL_RESERVOIR_DATA, URL_GAUGE_DATA, URL_PLUVIOMETER_DATA, URL_PIEZOMETER_DATA]\r\n",
+					"\r\n",
+					"# Function to extract data from API endpoints\r\n",
+					"def extract_data_from_api(url):\r\n",
+					"    response = requests.get(url)\r\n",
+					"    \r\n",
+					"    # Check if the request was successful (status code 200)\r\n",
+					"    if response.status_code == 200:\r\n",
+					"        json_data = response.json()\r\n",
+					"        return json_data\r\n",
+					"    else:\r\n",
+					"        print(f\"Failed to fetch data from {url}: Status Code {response.status_code}\")\r\n",
+					"        return None"
+				],
+				"execution_count": 132
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Get Previous Day Data"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"def get_sensors_data_day(read_date_dt=datetime.now()-timedelta(days=1), groups_cols_ids=groups_cols_ids, urls_data=urls_data):\r\n",
+					"    \r\n",
+					"    all_dfs_sensors_day = []\r\n",
+					"    \r\n",
+					"    for cols_ids, url_data in zip(groups_cols_ids, urls_data):\r\n",
+					"        df_sensor_data_day = pd.DataFrame(columns=cols_ids)\r\n",
+					"        \r\n",
+					"        time_ranges = [read_date_dt.replace(hour=i, minute=0, second=0, microsecond=0) for i in [0, 6, 12, 18]]\r\n",
+					"        for tr in time_ranges:\r\n",
+					"            dt_from = tr - timedelta(hours=6)\r\n",
+					"            dt_to = tr\r\n",
+					"            #print(url_data + f\"/?limit=5&from={dt_from.strftime('%d/%m/%YT%H:%M:%S')}&to={(dt_to).strftime('%d/%m/%YT%H:%M:%S')}\")\r\n",
+					"            data_day = extract_data_from_api(url_data + f\"/?limit=5&from={dt_from.strftime('%d/%m/%YT%H:%M:%S')}&to={(dt_to + timedelta(hours=6)).strftime('%d/%m/%YT%H:%M:%S')}\")\r\n",
+					"            \r\n",
+					"            for sensor in data_day[\"sensors\"]:\r\n",
+					"                sensor_id = sensor[\"sensor\"]\r\n",
+					"                #print(\"sensor_id:\", sensor_id, end=\" \")\r\n",
+					"                # averaging up to the last 5 reads to get a more steady value\r\n",
+					"                if sensor[\"observations\"]:\r\n",
+					"                    value = np.mean([float(obs[\"value\"]) for obs in sensor[\"observations\"]]).round(4)\r\n",
+					"                    df_sensor_data_day.loc[dt_to, sensor_id] = value\r\n",
+					"                \r\n",
+					"        all_dfs_sensors_day.append(df_sensor_data_day)\r\n",
+					"        \r\n",
+					"    return all_dfs_sensors_day\r\n",
+					"print(get_sensors_data_day())\r\n",
+					""
+				],
+				"execution_count": 133
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": true,
+						"outputs_hidden": true
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"\r\n",
+					"# def get_sensors_data_day(read_date_dt=datetime.now() - timedelta(days=1), groups_cols_ids=None, urls_data=None):\r\n",
+					"#     if urls_data is None:\r\n",
+					"#         urls_data = [\r\n",
+					"#             'http://aca-web.gencat.cat/sdim2/apirest/data/EMBASSAMENT-EST',\r\n",
+					"#             'http://aca-web.gencat.cat/sdim2/apirest/data/AFORAMENT-EST',\r\n",
+					"#             'http://aca-web.gencat.cat/sdim2/apirest/data/PLUVIOMETREACA-EST',\r\n",
+					"#             'http://aca-web.gencat.cat/sdim2/apirest/data/PIEZOMETRE-EST'\r\n",
+					"#         ]\r\n",
+					"    \r\n",
+					"#     if groups_cols_ids is None:\r\n",
+					"#         groups_cols_ids = [\r\n",
+					"#             reservoir_sensors_ids,\r\n",
+					"#             gauge_sensors_ids,\r\n",
+					"#             pluviometer_sensors_ids,\r\n",
+					"#             piezometer_sensors_ids\r\n",
+					"#         ]\r\n",
+					"#     all_dfs_sensors_day = []\r\n",
+					"    \r\n",
+					"#     time_ranges = [read_date_dt.replace(hour=i, minute=0, second=0, microsecond=0) for i in [0, 6, 12, 18]]\r\n",
+					"    \r\n",
+					"#     for cols_ids, url_data in zip(groups_cols_ids, urls_data):\r\n",
+					"#         # List to collect temporary DataFrames\r\n",
+					"#         temp_dfs = []\r\n",
+					"        \r\n",
+					"#         for tr in time_ranges:\r\n",
+					"#             dt_from = tr - timedelta(hours=6)\r\n",
+					"#             dt_to = tr\r\n",
+					"#             data_day = extract_data_from_api(url_data + f\"/?limit=5&from={dt_from.strftime('%d/%m/%YT%H:%M:%S')}&to={(dt_to + timedelta(hours=6)).strftime('%d/%m/%YT%H:%M:%S')}\")\r\n",
+					"            \r\n",
+					"#             # Create a temporary DataFrame to store current time range data\r\n",
+					"#             temp_data = []\r\n",
+					"#             for sensor in data_day[\"sensors\"]:\r\n",
+					"#                 sensor_id = sensor[\"sensor\"]\r\n",
+					"#                 if sensor[\"observations\"]:\r\n",
+					"#                     value = np.mean([float(obs[\"value\"]) for obs in sensor[\"observations\"]]).round(4)\r\n",
+					"#                     temp_data.append(pd.DataFrame({sensor_id: value}, index=[dt_to]))\r\n",
+					"            \r\n",
+					"#             # Concatenate current time range data\r\n",
+					"#             if temp_data:\r\n",
+					"#                 temp_dfs.append(pd.concat(temp_data, axis=1))\r\n",
+					"        \r\n",
+					"#         # Concatenate all temporary DataFrames to create the final DataFrame for this URL\r\n",
+					"#         if temp_dfs:\r\n",
+					"#             df_sensor_data_day = pd.concat(temp_dfs, axis=0).reindex(columns=cols_ids)\r\n",
+					"#             all_dfs_sensors_day.append(df_sensor_data_day)\r\n",
+					"    \r\n",
+					"#     return all_dfs_sensors_day\r\n",
+					"\r\n",
+					"# def display_data_frames(data_frames):\r\n",
+					"#     for idx, df in enumerate(data_frames):\r\n",
+					"#         print(f\"DataFrame {idx + 1}:\")\r\n",
+					"#         display(df)\r\n",
+					"#         print(\"-\" * 80)  # Print a separator line for better readability\r\n",
+					"\r\n",
+					"# # Assume `get_sensors_data_day()` has been called and its output is stored in a variable:\r\n",
+					"# dfs = get_sensors_data_day()\r\n",
+					"\r\n",
+					"# # Display the DataFrames\r\n",
+					"# display_data_frames(dfs)"
+				],
+				"execution_count": 134
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Sensor Reads Data Path"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"\r\n",
+					"# Importing all previous data\r\n",
+					"# Define the list of file paths for old data\r\n",
+					"#DATA_PATH = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}\"\r\n",
+					"DATA_PATH = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/BronzeLayer/{FolderName}\"\r\n",
+					"list_paths_old_data = [\r\n",
+					"    DATA_PATH + f\"/{category[0]}{sensors_end}.csv\",\r\n",
+					"    DATA_PATH + f\"/{category[1]}{sensors_end}.csv\",\r\n",
+					"    DATA_PATH + f\"/{category[2]}{sensors_end}.csv\",\r\n",
+					"    DATA_PATH + f\"/{category[3]}{sensors_end}.csv\",\r\n",
+					"]\r\n",
+					"\r\n",
+					"# Check if the first file exists using mssparkutils\r\n",
+					"if mssparkutils.fs.exists(list_paths_old_data[0]):\r\n",
+					"    print(\"Previous Files Found, Loading now \")\r\n",
+					"    #list_all_old_data_s = [spark.read.option(\"header\", \"true\").option(\"inferSchema\", \"true\").csv(path) for path in list_paths_old_data]\r\n",
+					"    list_all_old_data = [pd.read_csv(path_old_data, parse_dates=[0], index_col=0) for path_old_data in list_paths_old_data]\r\n",
+					"else:\r\n",
+					"    print(\"No existing File, Initiate first Run\")\r\n",
+					"    #list_all_old_data_s = None\r\n",
+					"    list_all_old_data = None\r\n",
+					"\r\n",
+					""
+				],
+				"execution_count": 138
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### New Df or Append Data\r\n",
+					"For the first time, the data is needs to populate the df thus takes a long time."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"\r\n",
+					"# If it's the first run and there is no data from previous days:\r\n",
+					"# Example check if both variables are None\r\n",
+					"#if list_all_old_data_s is None and list_all_old_data_p is None:\r\n",
+					"if list_all_old_data is None:\r\n",
+					"    print(\"variables are None\")\r\n",
+					"    # Checking if the directory doesn't exists and create folder\r\n",
+					"    if not mssparkutils.fs.exists(meta_path):\r\n",
+					"        mssparkutils.fs.mkdirs(meta_path)\r\n",
+					"    # Saving metadata in Dataset for the first time\r\n",
+					"\r\n",
+					"    reservoir_sensors_metadata.to_csv(f\"{meta_path}/reservoir_sensors_metadata.csv\", index=False)\r\n",
+					"    gauge_sensors_metadata.to_csv(f\"{meta_path}/gauge_sensors_metadata.csv\", index=False)\r\n",
+					"    pluviometer_sensors_metadata.to_csv(f\"{meta_path}/pluviometer_sensors_metadata.csv\", index=False)\r\n",
+					"    piezometer_sensors_metadata.to_csv(f\"{meta_path}/piezometer_sensors_metadata.csv\", index=False)\r\n",
+					"\r\n",
+					"    list_all_data = [[] for _ in range(4)]\r\n",
+					"    \r\n",
+					"    # Requesting the data for all sensors for the last 3 months, which is the max. stored in the public ACA API\r\n",
+					"    for d in tqdm(range(89, 0, -1)):\r\n",
+					"        print(d)\r\n",
+					"        read_date_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=d)\r\n",
+					"        all_dfs_sensors_day = get_sensors_data_day(read_date_dt=read_date_dt)\r\n",
+					"        \r\n",
+					"        for i in range(4):\r\n",
+					"            list_all_data[i].append(all_dfs_sensors_day[i])\r\n",
+					"        \r\n",
+					"    list_all_old_data = [pd.concat(dfs_sensor_data, axis=0) for dfs_sensor_data in list_all_data]\r\n",
+					"    print(\"First Load Compleete\")\r\n",
+					"    \r\n",
+					"else:  \r\n",
+					"    # Normal daily update\r\n",
+					"    read_date_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)\r\n",
+					"    print(\"Old data found, requesting and updating previous day's sensor reads...\")\r\n",
+					"\r\n",
+					"    last_dfs_sensors_day = get_sensors_data_day(read_date_dt=read_date_dt)\r\n",
+					"\r\n",
+					"    list_all_old_data = [pd.concat([old_df_sensor, last_df_sensor], axis=0) for old_df_sensor, last_df_sensor in zip(list_all_old_data, last_dfs_sensors_day)]\r\n",
+					"    list_all_old_data = [df_sensor.sort_index(ascending=False) for df_sensor in list_all_old_data]\r\n",
+					"    list_all_old_data = [df_sensor[~df_sensor.index.duplicated(keep=\"first\")] for df_sensor in list_all_old_data]\r\n",
+					"    print(\"Daily Update Complete\")\r\n",
+					""
+				],
+				"execution_count": 58
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#### Data Loading"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# print(f\"{sensors_reads_path}/{category[0]}{sensors_end}\")"
+				],
+				"execution_count": 68
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"\r\n",
+					"if list_all_old_data is not None:\r\n",
+					"    for category, df_sensor_data in zip(category, list_all_old_data):\r\n",
+					"        print(f\"DataFrame for {category}:\")\r\n",
+					"        print(df_sensor_data)\r\n",
+					"        df_sensor_data.to_csv(f\"{sensors_reads_path}/{category}{sensors_end}.csv\")\r\n",
+					"        print(f\"CSV file for {category} successfully stored\")\r\n",
+					"else:\r\n",
+					"    print(\"list_all_old_data is None. Please initialize it before iterating.\")\r\n",
+					""
+				],
+				"execution_count": 60
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Check if the file path exists using mssparkutils\r\n",
+					"if not mssparkutils.fs.exists(f\"{ml_path}\"):\r\n",
+					"    print(f\"ML Folder Not Found, Creating One Now \")\r\n",
+					"    mssparkutils.fs.mkdirs(f\"{ml_path}\")\r\n",
+					"    print(f\"ML Folder Created\")\r\n",
+					"else:\r\n",
+					"    print(f\"ML Folder Found, Proceeding with code\")"
+				],
+				"execution_count": 61
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Statistics"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# if list_all_old_data is not None:\r\n",
+					"#     #print(\"Total Rows in First DF:\", len(list_all_old_data[0]))\r\n",
+					"#     #print(\"Total Sensors:\", sum([len(s.columns) for s in list_all_old_data]))\r\n",
+					"#     print(\" Sensor Reads\")\r\n",
+					"#     print(\"From:\", list_all_old_data[0].index[0]) \r\n",
+					"#     print(\"To:  \", list_all_old_data[0].index[-1])\r\n",
+					"# else:\r\n",
+					"#     print(\"list_all_old_data is None. Please initialize it before iterating.\")\r\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# if raw_data_final is not None:\r\n",
+					"#     print(\" ML Data\")\r\n",
+					"#     print(\"From:\", raw_data_final[0].index[0]) \r\n",
+					"#     print(\"To:  \", raw_data_final[0].index[-1])\r\n",
+					"# else:\r\n",
+					"#     print(\"raw_data_final is None. Please initialize it before iterating.\")\r\n",
+					""
+				]
+			}
+		]
+	}
+}
