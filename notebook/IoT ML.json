@@ -18,15 +18,16 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "ebd9dcfd-db16-4c7c-9aec-8b04e2565a85"
+				"spark.autotune.trackingId": "a9280386-15aa-42ea-b976-72b88fc6a3a4"
 			}
 		},
 		"metadata": {
 			"saveOutput": true,
-			"synapse_widget": {
-				"version": "0.1"
-			},
 			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
 			"language_info": {
 				"name": "python"
 			},
@@ -37,14 +38,13 @@
 				"endpoint": "https://water-crisis.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/backuppool",
 				"auth": {
 					"type": "AAD",
-					"authResource": "https://dev.azuresynapse.net",
-					"authHeader": null
+					"authResource": "https://dev.azuresynapse.net"
 				},
 				"sparkVersion": "3.4",
 				"nodeCount": 10,
 				"cores": 4,
 				"memory": 28,
-				"extraHeader": null
+				"automaticScaleJobs": false
 			},
 			"sessionKeepAliveTimeout": 30
 		},
@@ -90,7 +90,7 @@
 					"ml_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/ML_Folder\"\r\n",
 					""
 				],
-				"execution_count": 2
+				"execution_count": 141
 			},
 			{
 				"cell_type": "markdown",
@@ -127,7 +127,7 @@
 					"else:\r\n",
 					"    print(f\"ML Folder Found, Proceeding with code\")"
 				],
-				"execution_count": 3
+				"execution_count": 142
 			},
 			{
 				"cell_type": "markdown",
@@ -172,7 +172,7 @@
 					"pip install openmeteo-requests\r\n",
 					""
 				],
-				"execution_count": 4
+				"execution_count": 143
 			},
 			{
 				"cell_type": "code",
@@ -190,7 +190,7 @@
 				"source": [
 					"pip install requests-cache retry-requests"
 				],
-				"execution_count": 5
+				"execution_count": 144
 			},
 			{
 				"cell_type": "code",
@@ -244,7 +244,7 @@
 					"    'fs.azure.sas.{}.dfs.core.windows.net' .format(blob_account),\r\n",
 					"    dls_sas_token)"
 				],
-				"execution_count": 6
+				"execution_count": 145
 			},
 			{
 				"cell_type": "markdown",
@@ -288,7 +288,7 @@
 				"source": [
 					"import pandas as pd"
 				],
-				"execution_count": 7
+				"execution_count": 146
 			},
 			{
 				"cell_type": "code",
@@ -328,7 +328,7 @@
 					"print(combined_meta.head())\r\n",
 					""
 				],
-				"execution_count": 8
+				"execution_count": 147
 			},
 			{
 				"cell_type": "markdown",
@@ -387,7 +387,7 @@
 					"# Print a sample to verify\r\n",
 					"print(combined_sensor.head())"
 				],
-				"execution_count": 9
+				"execution_count": 148
 			},
 			{
 				"cell_type": "markdown",
@@ -425,7 +425,7 @@
 					"\r\n",
 					"print(raw_data.head())"
 				],
-				"execution_count": 10
+				"execution_count": 149
 			},
 			{
 				"cell_type": "markdown",
@@ -462,7 +462,7 @@
 					"    print(\"Number of columns:\", df.shape[1])\r\n",
 					""
 				],
-				"execution_count": 11
+				"execution_count": 150
 			},
 			{
 				"cell_type": "code",
@@ -486,7 +486,7 @@
 					"    print(\"Number of columns:\", df.shape[1])\r\n",
 					""
 				],
-				"execution_count": 12
+				"execution_count": 151
 			},
 			{
 				"cell_type": "code",
@@ -528,7 +528,7 @@
 					"print(\"Number of RawData columns:\", snum_columns)\r\n",
 					"print()"
 				],
-				"execution_count": 13
+				"execution_count": 152
 			},
 			{
 				"cell_type": "markdown",
@@ -614,7 +614,7 @@
 					"\r\n",
 					""
 				],
-				"execution_count": 14
+				"execution_count": 153
 			},
 			{
 				"cell_type": "code",
@@ -658,7 +658,7 @@
 					"\r\n",
 					"\r\n",
 					"# if not mssparkutils.fs.exists(f\"{ml_path}/raw_data_final.csv\"):\r\n",
-					"print(\"First Run: Fetching and processing Data....\")\r\n",
+					"print(\"Fetching and processing Data....\")\r\n",
 					"\r\n",
 					"min_date = raw_data['Date'].min().strftime('%Y-%m-%d')\r\n",
 					"max_date = raw_data['Date'].max().strftime('%Y-%m-%d')\r\n",
@@ -719,7 +719,7 @@
 					"#     else:\r\n",
 					"#         print(\"No new data to update because data is already updated.\")"
 				],
-				"execution_count": 15
+				"execution_count": 154
 			},
 			{
 				"cell_type": "code",
@@ -737,7 +737,20 @@
 				"source": [
 					"print(raw_data_final.head(20))"
 				],
-				"execution_count": 16
+				"execution_count": 140
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Split Sub Categories"
+				]
 			},
 			{
 				"cell_type": "markdown",
@@ -769,7 +782,7 @@
 				"cell_type": "code",
 				"metadata": {
 					"jupyter": {
-						"source_hidden": false,
+						"source_hidden": true,
 						"outputs_hidden": false
 					},
 					"nteract": {
@@ -869,100 +882,6 @@
 					"#         print(\"No new data to update because data is already updated.\")"
 				],
 				"execution_count": 20
-			},
-			{
-				"cell_type": "code",
-				"metadata": {
-					"jupyter": {
-						"source_hidden": false,
-						"outputs_hidden": false
-					},
-					"nteract": {
-						"transient": {
-							"deleting": false
-						}
-					}
-				},
-				"source": [
-					"number_of_rows = raw_data_final.shape[0]\r\n",
-					"print(\"Number of rows:\", number_of_rows)"
-				],
-				"execution_count": 17
-			},
-			{
-				"cell_type": "code",
-				"metadata": {
-					"jupyter": {
-						"source_hidden": false,
-						"outputs_hidden": false
-					},
-					"nteract": {
-						"transient": {
-							"deleting": false
-						}
-					}
-				},
-				"source": [
-					"print(raw_data_final.columns)"
-				],
-				"execution_count": 24
-			},
-			{
-				"cell_type": "code",
-				"metadata": {
-					"jupyter": {
-						"source_hidden": false,
-						"outputs_hidden": false
-					},
-					"nteract": {
-						"transient": {
-							"deleting": false
-						}
-					}
-				},
-				"source": [
-					"raw_ml = pd.read_csv(f\"{ml_path}/raw_data_final.csv\",low_memory=False)\r\n",
-					"print(raw_ml.head(2))"
-				],
-				"execution_count": 86
-			},
-			{
-				"cell_type": "code",
-				"metadata": {
-					"jupyter": {
-						"source_hidden": false,
-						"outputs_hidden": false
-					},
-					"nteract": {
-						"transient": {
-							"deleting": false
-						}
-					}
-				},
-				"source": [
-					"print(raw_ml['description'].unique())\r\n",
-					""
-				],
-				"execution_count": 88
-			},
-			{
-				"cell_type": "code",
-				"metadata": {
-					"jupyter": {
-						"source_hidden": false,
-						"outputs_hidden": false
-					},
-					"nteract": {
-						"transient": {
-							"deleting": false
-						}
-					}
-				},
-				"source": [
-					"print(raw_ml.columns)\r\n",
-					""
-				],
-				"execution_count": 89
 			},
 			{
 				"cell_type": "code",
