@@ -1,0 +1,18 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"value": "water-crisis"
+		},
+		"water-crisis-WorkspaceDefaultSqlServer_connectionString": {
+			"value": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:water-crisis.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"API_Gauge_Data_properties_typeProperties_url": {
+			"value": "http://aca-web.gencat.cat/sdim2/apirest/data/AFORAMENT-EST"
+		},
+		"water-crisis-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"value": "https://projectwatercrisis.dfs.core.windows.net"
+		}
+	}
+}
