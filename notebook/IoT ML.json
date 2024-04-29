@@ -18,7 +18,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "a9280386-15aa-42ea-b976-72b88fc6a3a4"
+				"spark.autotune.trackingId": "a6da38e9-c8e1-4e54-9c21-241a5a67c3d0"
 			}
 		},
 		"metadata": {
@@ -90,7 +90,7 @@
 					"ml_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/ML_Folder\"\r\n",
 					""
 				],
-				"execution_count": 141
+				"execution_count": 30
 			},
 			{
 				"cell_type": "markdown",
@@ -127,7 +127,7 @@
 					"else:\r\n",
 					"    print(f\"ML Folder Found, Proceeding with code\")"
 				],
-				"execution_count": 142
+				"execution_count": 4
 			},
 			{
 				"cell_type": "markdown",
@@ -172,7 +172,7 @@
 					"pip install openmeteo-requests\r\n",
 					""
 				],
-				"execution_count": 143
+				"execution_count": 5
 			},
 			{
 				"cell_type": "code",
@@ -190,7 +190,25 @@
 				"source": [
 					"pip install requests-cache retry-requests"
 				],
-				"execution_count": 144
+				"execution_count": 6
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				],
+				"execution_count": null
 			},
 			{
 				"cell_type": "code",
@@ -211,13 +229,6 @@
 					"from datetime import datetime, timedelta\r\n",
 					"from notebookutils import mssparkutils\r\n",
 					"from pyspark.sql import SparkSession\r\n",
-					"from sklearn.model_selection import train_test_split\r\n",
-					"from sklearn.linear_model import LinearRegression\r\n",
-					"from sklearn.metrics import mean_squared_error\r\n",
-					"from sklearn.preprocessing import StandardScaler\r\n",
-					"import openmeteo_requests\r\n",
-					"from retry_requests import retry\r\n",
-					"import requests_cache\r\n",
 					"from pyspark.sql.types import DateType\r\n",
 					"from datetime import datetime, timedelta\r\n",
 					"from tqdm.notebook import tqdm\r\n",
@@ -226,7 +237,19 @@
 					"import matplotlib.pyplot as plt\r\n",
 					"from scipy.stats import zscore\r\n",
 					"import requests,json,os\r\n",
-					"\r\n",
+					"import openmeteo_requests\r\n",
+					"from retry_requests import retry\r\n",
+					"import requests_cache\r\n",
+					"from sklearn.model_selection import train_test_split\r\n",
+					"from sklearn.linear_model import LinearRegression\r\n",
+					"from sklearn.metrics import mean_squared_error\r\n",
+					"from sklearn.preprocessing import StandardScaler\r\n",
+					"from sklearn.ensemble import IsolationForest\r\n",
+					"from pyspark.ml.regression import RandomForestRegressor\r\n",
+					"from pyspark.ml.feature import VectorAssembler\r\n",
+					"from pyspark.ml.evaluation import RegressionEvaluator\r\n",
+					"from pyspark.ml import Pipeline\r\n",
+					"from sklearn.tree import DecisionTreeRegressor\r\n",
 					"\r\n",
 					"#Create Spark Session and connection to blob storage. It is created in the Notebook and not in the pipeline. \r\n",
 					"#You can only set Spark configuration properties that start with the spark.sql prefix.\r\n",
@@ -242,9 +265,12 @@
 					"dls_sas_token = token_library.getConnectionString(\"water-crisis-WorkspaceDefaultStorage\")\r\n",
 					"spark.conf.set(\r\n",
 					"    'fs.azure.sas.{}.dfs.core.windows.net' .format(blob_account),\r\n",
-					"    dls_sas_token)"
+					"    dls_sas_token)\r\n",
+					"\r\n",
+					"# Initialize Spark session\r\n",
+					"spark = SparkSession.builder.appName(\"Decision Forest Regression\").getOrCreate()"
 				],
-				"execution_count": 145
+				"execution_count": 28
 			},
 			{
 				"cell_type": "markdown",
@@ -288,7 +314,7 @@
 				"source": [
 					"import pandas as pd"
 				],
-				"execution_count": 146
+				"execution_count": 8
 			},
 			{
 				"cell_type": "code",
@@ -328,7 +354,7 @@
 					"print(combined_meta.head())\r\n",
 					""
 				],
-				"execution_count": 147
+				"execution_count": 9
 			},
 			{
 				"cell_type": "markdown",
@@ -387,7 +413,7 @@
 					"# Print a sample to verify\r\n",
 					"print(combined_sensor.head())"
 				],
-				"execution_count": 148
+				"execution_count": 10
 			},
 			{
 				"cell_type": "markdown",
@@ -425,7 +451,7 @@
 					"\r\n",
 					"print(raw_data.head())"
 				],
-				"execution_count": 149
+				"execution_count": 11
 			},
 			{
 				"cell_type": "markdown",
@@ -462,7 +488,7 @@
 					"    print(\"Number of columns:\", df.shape[1])\r\n",
 					""
 				],
-				"execution_count": 150
+				"execution_count": 12
 			},
 			{
 				"cell_type": "code",
@@ -486,7 +512,7 @@
 					"    print(\"Number of columns:\", df.shape[1])\r\n",
 					""
 				],
-				"execution_count": 151
+				"execution_count": 13
 			},
 			{
 				"cell_type": "code",
@@ -528,7 +554,7 @@
 					"print(\"Number of RawData columns:\", snum_columns)\r\n",
 					"print()"
 				],
-				"execution_count": 152
+				"execution_count": 14
 			},
 			{
 				"cell_type": "markdown",
@@ -614,7 +640,7 @@
 					"\r\n",
 					""
 				],
-				"execution_count": 153
+				"execution_count": 15
 			},
 			{
 				"cell_type": "code",
@@ -719,7 +745,7 @@
 					"#     else:\r\n",
 					"#         print(\"No new data to update because data is already updated.\")"
 				],
-				"execution_count": 154
+				"execution_count": 16
 			},
 			{
 				"cell_type": "code",
@@ -737,7 +763,7 @@
 				"source": [
 					"print(raw_data_final.head(20))"
 				],
-				"execution_count": 140
+				"execution_count": 17
 			},
 			{
 				"cell_type": "markdown",
@@ -764,6 +790,231 @@
 				"source": [
 					"## ML Ops"
 				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"ml_data = raw_data_final\r\n",
+					"print(ml_data.head(2))"
+				],
+				"execution_count": 23
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"list(ml_data.columns)"
+				],
+				"execution_count": 25
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### PySpark"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# # Assume you determine the input columns from your data exploration\r\n",
+					"# input_cols = [\"sensor_id\", \"description\", \"type\", \"info_municipality\", \"Date\",\"Temperature\",\"Reading\"]\r\n",
+					"\r\n",
+					"# assembler = VectorAssembler(inputCols=input_cols, outputCol=\"features\")\r\n",
+					"\r\n",
+					"# # Optionally, split the data into training and testing sets\r\n",
+					"# train_data, test_data = df.randomSplit([0.7, 0.3])\r\n",
+					"\r\n",
+					"# # Initialize the RandomForestRegressor\r\n",
+					"# rf = RandomForestRegressor(featuresCol=\"features\", labelCol=\"targetColumn\")\r\n",
+					"\r\n",
+					"# # Define the pipeline\r\n",
+					"# pipeline = Pipeline(stages=[assembler, rf])\r\n",
+					"\r\n",
+					"# # Train the model\r\n",
+					"# model = pipeline.fit(train_data)\r\n",
+					"\r\n",
+					"# # Make predictions\r\n",
+					"# predictions = model.transform(test_data)\r\n",
+					"# predictions.select(\"prediction\", \"targetColumn\").show()\r\n",
+					"\r\n",
+					"# # Evaluate the model\r\n",
+					"# evaluator = RegressionEvaluator(labelCol=\"targetColumn\", predictionCol=\"prediction\", metricName=\"rmse\")\r\n",
+					"# rmse = evaluator.evaluate(predictions)\r\n",
+					"# print(\"Root Mean Squared Error (RMSE) on test data =\", rmse)"
+				],
+				"execution_count": 27
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##### Pandas"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Select features and target variable\r\n",
+					"X = ml_data[['sensor_id', 'description', 'type', 'info_municipality', 'Date','Temperature']]  # Replace with your actual feature columns\r\n",
+					"y = ml_data['Reading']  # Replace with your actual target column\r\n",
+					"\r\n",
+					"# Split the data into training and testing sets\r\n",
+					"X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)\r\n",
+					"\r\n",
+					"# Create a modeling pipeline\r\n",
+					"model = make_pipeline(preprocessor, RandomForestRegressor(n_estimators=100))\r\n",
+					"\r\n",
+					"# Train the model\r\n",
+					"model.fit(X_train, y_train)\r\n",
+					""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from sklearn.metrics import mean_squared_error\r\n",
+					"\r\n",
+					"# Make predictions on the test data\r\n",
+					"y_pred = model.predict(X_test)\r\n",
+					"\r\n",
+					"# Create a DataFrame from the predictions\r\n",
+					"predictions_df = pd.DataFrame(y_pred, columns=['Predicted'], index=X_test.index)\r\n",
+					"\r\n",
+					"# Add predictions back to the original DataFrame for analysis\r\n",
+					"# Here, ml_data is your original DataFrame with all the original rows and columns, including 'Reading'\r\n",
+					"ml_data_with_predictions = ml_data.join(predictions_df, how='left')\r\n",
+					"\r\n",
+					"# You can also join the actual target values from y_test for side-by-side comparison\r\n",
+					"# Since y_test may not directly align with ml_data's index if it was reset or altered, reindex it\r\n",
+					"ml_data_with_predictions['Actual Reading'] = y_test.reindex(ml_data_with_predictions.index)\r\n",
+					"\r\n",
+					"# Evaluate the model's performance\r\n",
+					"mse = mean_squared_error(y_test, y_pred)\r\n",
+					"print(f\"Mean Squared Error: {mse}\")\r\n",
+					"\r\n",
+					""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"\r\n",
+					"\r\n",
+					"# Train a decision tree regressor\r\n",
+					"regressor = DecisionTreeRegressor()\r\n",
+					"regressor.fit(X_train, y_train)\r\n",
+					"\r\n",
+					"# Make predictions on the test set\r\n",
+					"predictions = regressor.predict(X_test)\r\n",
+					"\r\n",
+					"# Evaluate the model\r\n",
+					"mse = mean_squared_error(y_test, predictions)\r\n",
+					"print(f\"Mean Squared Error: {mse}\")\r\n",
+					""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Save the trained model\r\n",
+					"model.save(\"path_to_save_model\")\r\n",
+					"\r\n",
+					"# You can also deploy this model as a web service in Azure if required\r\n",
+					""
+				],
+				"execution_count": null
 			},
 			{
 				"cell_type": "markdown",
