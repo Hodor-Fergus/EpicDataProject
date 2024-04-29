@@ -18,7 +18,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "a6da38e9-c8e1-4e54-9c21-241a5a67c3d0"
+				"spark.autotune.trackingId": "a5ea8318-8df4-4070-9a67-7a91b95f2d9c"
 			}
 		},
 		"metadata": {
@@ -78,9 +78,10 @@
 			{
 				"cell_type": "code",
 				"source": [
+					"\r\n",
 					"# Get the version of the folder from the Bronze layer and this will be used as a parameter in the pipeline (Toggled as a parameter)\r\n",
 					"FolderName = \"Version_01\"\r\n",
-					"Mode = \"overwrite\" \r\n",
+					"Mode = \"overwrite\"\r\n",
 					"MetaFolder = \"Metadata\"\r\n",
 					"category = ['reservoir','gauge','pluviometer', 'piezometer']\r\n",
 					"meta_end = '_sensors_metadata'\r\n",
@@ -90,7 +91,7 @@
 					"ml_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/ML_Folder\"\r\n",
 					""
 				],
-				"execution_count": 30
+				"execution_count": 51
 			},
 			{
 				"cell_type": "markdown",
@@ -127,7 +128,7 @@
 					"else:\r\n",
 					"    print(f\"ML Folder Found, Proceeding with code\")"
 				],
-				"execution_count": 4
+				"execution_count": 34
 			},
 			{
 				"cell_type": "markdown",
@@ -172,7 +173,7 @@
 					"pip install openmeteo-requests\r\n",
 					""
 				],
-				"execution_count": 5
+				"execution_count": 35
 			},
 			{
 				"cell_type": "code",
@@ -190,7 +191,7 @@
 				"source": [
 					"pip install requests-cache retry-requests"
 				],
-				"execution_count": 6
+				"execution_count": 36
 			},
 			{
 				"cell_type": "code",
@@ -270,7 +271,7 @@
 					"# Initialize Spark session\r\n",
 					"spark = SparkSession.builder.appName(\"Decision Forest Regression\").getOrCreate()"
 				],
-				"execution_count": 28
+				"execution_count": 37
 			},
 			{
 				"cell_type": "markdown",
@@ -314,7 +315,7 @@
 				"source": [
 					"import pandas as pd"
 				],
-				"execution_count": 8
+				"execution_count": 38
 			},
 			{
 				"cell_type": "code",
@@ -354,7 +355,7 @@
 					"print(combined_meta.head())\r\n",
 					""
 				],
-				"execution_count": 9
+				"execution_count": 39
 			},
 			{
 				"cell_type": "markdown",
@@ -413,7 +414,7 @@
 					"# Print a sample to verify\r\n",
 					"print(combined_sensor.head())"
 				],
-				"execution_count": 10
+				"execution_count": 40
 			},
 			{
 				"cell_type": "markdown",
@@ -451,7 +452,7 @@
 					"\r\n",
 					"print(raw_data.head())"
 				],
-				"execution_count": 11
+				"execution_count": 41
 			},
 			{
 				"cell_type": "markdown",
@@ -488,7 +489,7 @@
 					"    print(\"Number of columns:\", df.shape[1])\r\n",
 					""
 				],
-				"execution_count": 12
+				"execution_count": 42
 			},
 			{
 				"cell_type": "code",
@@ -512,7 +513,7 @@
 					"    print(\"Number of columns:\", df.shape[1])\r\n",
 					""
 				],
-				"execution_count": 13
+				"execution_count": 43
 			},
 			{
 				"cell_type": "code",
@@ -554,7 +555,7 @@
 					"print(\"Number of RawData columns:\", snum_columns)\r\n",
 					"print()"
 				],
-				"execution_count": 14
+				"execution_count": 44
 			},
 			{
 				"cell_type": "markdown",
@@ -745,7 +746,7 @@
 					"#     else:\r\n",
 					"#         print(\"No new data to update because data is already updated.\")"
 				],
-				"execution_count": 16
+				"execution_count": 45
 			},
 			{
 				"cell_type": "code",
@@ -808,7 +809,7 @@
 					"ml_data = raw_data_final\r\n",
 					"print(ml_data.head(2))"
 				],
-				"execution_count": 23
+				"execution_count": 46
 			},
 			{
 				"cell_type": "code",
@@ -826,7 +827,7 @@
 				"source": [
 					"list(ml_data.columns)"
 				],
-				"execution_count": 25
+				"execution_count": 47
 			},
 			{
 				"cell_type": "markdown",
@@ -924,7 +925,7 @@
 					"model.fit(X_train, y_train)\r\n",
 					""
 				],
-				"execution_count": null
+				"execution_count": 48
 			},
 			{
 				"cell_type": "code",
