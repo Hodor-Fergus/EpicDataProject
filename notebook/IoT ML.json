@@ -18,7 +18,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "a5ea8318-8df4-4070-9a67-7a91b95f2d9c"
+				"spark.autotune.trackingId": "1db80c6d-7fdc-4638-bbf7-58e7268794d6"
 			}
 		},
 		"metadata": {
@@ -91,7 +91,7 @@
 					"ml_path = f\"abfss://waterstorageaccount@projectwatercrisis.dfs.core.windows.net/ML_Folder\"\r\n",
 					""
 				],
-				"execution_count": 51
+				"execution_count": 4
 			},
 			{
 				"cell_type": "markdown",
@@ -128,7 +128,7 @@
 					"else:\r\n",
 					"    print(f\"ML Folder Found, Proceeding with code\")"
 				],
-				"execution_count": 34
+				"execution_count": 5
 			},
 			{
 				"cell_type": "markdown",
@@ -173,7 +173,7 @@
 					"pip install openmeteo-requests\r\n",
 					""
 				],
-				"execution_count": 35
+				"execution_count": 6
 			},
 			{
 				"cell_type": "code",
@@ -191,7 +191,7 @@
 				"source": [
 					"pip install requests-cache retry-requests"
 				],
-				"execution_count": 36
+				"execution_count": 7
 			},
 			{
 				"cell_type": "code",
@@ -271,7 +271,7 @@
 					"# Initialize Spark session\r\n",
 					"spark = SparkSession.builder.appName(\"Decision Forest Regression\").getOrCreate()"
 				],
-				"execution_count": 37
+				"execution_count": 8
 			},
 			{
 				"cell_type": "markdown",
@@ -315,7 +315,7 @@
 				"source": [
 					"import pandas as pd"
 				],
-				"execution_count": 38
+				"execution_count": 9
 			},
 			{
 				"cell_type": "code",
@@ -355,7 +355,7 @@
 					"print(combined_meta.head())\r\n",
 					""
 				],
-				"execution_count": 39
+				"execution_count": 10
 			},
 			{
 				"cell_type": "markdown",
@@ -414,7 +414,7 @@
 					"# Print a sample to verify\r\n",
 					"print(combined_sensor.head())"
 				],
-				"execution_count": 40
+				"execution_count": 11
 			},
 			{
 				"cell_type": "markdown",
@@ -452,7 +452,7 @@
 					"\r\n",
 					"print(raw_data.head())"
 				],
-				"execution_count": 41
+				"execution_count": 12
 			},
 			{
 				"cell_type": "markdown",
@@ -489,7 +489,7 @@
 					"    print(\"Number of columns:\", df.shape[1])\r\n",
 					""
 				],
-				"execution_count": 42
+				"execution_count": 13
 			},
 			{
 				"cell_type": "code",
@@ -513,7 +513,7 @@
 					"    print(\"Number of columns:\", df.shape[1])\r\n",
 					""
 				],
-				"execution_count": 43
+				"execution_count": 14
 			},
 			{
 				"cell_type": "code",
@@ -555,7 +555,7 @@
 					"print(\"Number of RawData columns:\", snum_columns)\r\n",
 					"print()"
 				],
-				"execution_count": 44
+				"execution_count": 15
 			},
 			{
 				"cell_type": "markdown",
@@ -641,7 +641,7 @@
 					"\r\n",
 					""
 				],
-				"execution_count": 15
+				"execution_count": 16
 			},
 			{
 				"cell_type": "code",
@@ -746,7 +746,7 @@
 					"#     else:\r\n",
 					"#         print(\"No new data to update because data is already updated.\")"
 				],
-				"execution_count": 45
+				"execution_count": 17
 			},
 			{
 				"cell_type": "code",
@@ -764,7 +764,84 @@
 				"source": [
 					"print(raw_data_final.head(20))"
 				],
-				"execution_count": 17
+				"execution_count": 18
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"ml_predict_data = raw_data_final[['sensor_id','description','info_municipality','type','Date','Temperature','Reading']]\r\n",
+					"#count rows\r\n",
+					"row_count = ml_predict_data.shape[0]\r\n",
+					"print(\"Number of rows before Dropping NA:\", row_count)\r\n",
+					"#remove null\r\n",
+					"ml_predict_data = ml_predict_data.dropna()\r\n",
+					"row_count2 = ml_predict_data.shape[0]\r\n",
+					"print(\"Number of rows before Dropping NA:\", row_count2)\r\n",
+					"#count rows\r\n",
+					"\r\n",
+					""
+				],
+				"execution_count": 19
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"ml_predict_data.to_csv(f\"{ml_path}/ml_predict_data.csv\", index=False)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"print(ml_predict_data.head(20))"
+				],
+				"execution_count": 21
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"Aggregrate on Date."
+				]
 			},
 			{
 				"cell_type": "markdown",
@@ -1318,6 +1395,60 @@
 					"# print(hourly_dataframe)"
 				],
 				"execution_count": 75
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"print(\"Hello\")"
+				],
+				"execution_count": 3
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				],
+				"execution_count": null
 			}
 		]
 	}
